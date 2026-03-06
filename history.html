@@ -203,39 +203,42 @@ async function fetchAndMerge() {
     const today     = new Date().toISOString().split('T')[0];
     const storedIds = new Set(allMatches.map(m => m.id));
 
-    // Fetch per Swedish team ID — guarantees we get every match for every
-    // Swedish-player team, no matter how many non-Swedish matches exist in between.
-    const sweTeamIds = Object.keys(_sweTeamData);
-    const newMatches = [];
-
-    // Batch team IDs into groups of 10 to keep API call count low
-    // PandaScore supports filter[opponent_id][]=id1&filter[opponent_id][]=id2 …
-    const CHUNK = 10;
-    for (let i = 0; i < sweTeamIds.length; i += CHUNK) {
-      const chunk = sweTeamIds.slice(i, i + CHUNK);
-      const qp = chunk.map(id => `filter[opponent_id][]=${id}`).join('&');
-      let page = 1;
-      while (true) {
-        const batch = await pandaFetch(
-          `/csgo/matches/past?per_page=50&sort=-end_at&page=${page}&include=opponents,results&range[end_at]=${yearStart},${today}&${qp}`
-        );
-        if (!batch.length) break;
-        // Only keep matches where at least one opponent is a Swedish team
-        batch.filter(hasSweTeam).forEach(m => newMatches.push(m));
-        // Stop paging this chunk if we've seen all these matches before
-        const allKnown = batch.every(m => storedIds.has(m.id));
-        if (allKnown || batch.length < 50) break;
-        page++;
-        if (page > 6) break; // 300 matches per chunk is more than enough
-      }
-    }
+    // Only fetch for teams with 3+ Swedish players — these are the teams
+    // we actually care about, and keeps API calls to ~10-15 max.
+    const sweTeamIds = Object.entries(_sweTeamData)
+      .filter(([, d]) => d.count >= 3)
+      .map(([id]) => id);
 
     const byId = {};
     allMatches.forEach(m => { byId[m.id] = m; });
-    newMatches.forEach(m => { byId[m.id] = m; });
-    allMatches = Object.values(byId).sort((a, b) =>
-      new Date(b.end_at || b.begin_at) - new Date(a.end_at || a.begin_at)
-    );
+
+    // One request per team — single filter[opponent_id] param, always works.
+    // Run them sequentially to avoid hammering the API.
+    for (const teamId of sweTeamIds) {
+      try {
+        let page = 1;
+        while (true) {
+          const batch = await pandaFetch(
+            `/csgo/matches/past?per_page=50&sort=-end_at&page=${page}` +
+            `&include=opponents,results` +
+            `&range[end_at]=${yearStart},${today}` +
+            `&filter[opponent_id]=${teamId}`
+          );
+          if (!batch.length) break;
+          batch.forEach(m => { byId[m.id] = m; });
+          // Stop if all matches on this page were already stored
+          if (batch.every(m => storedIds.has(m.id)) || batch.length < 50) break;
+          page++;
+          if (page > 5) break; // 250 matches per team is plenty
+        }
+      } catch(e) {
+        console.warn('[SWE History] Team', teamId, 'failed:', e);
+      }
+    }
+
+    allMatches = Object.values(byId)
+      .filter(hasSweTeam)
+      .sort((a, b) => new Date(b.end_at || b.begin_at) - new Date(a.end_at || a.begin_at));
 
     saveHistory(allMatches);
     document.getElementById('stats-section').style.display = 'flex';
