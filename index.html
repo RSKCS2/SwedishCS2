@@ -165,22 +165,14 @@ async function fetchMatches() {
   try {
     await ensureSwedishData();
 
-    // Step 1: get running + upcoming lists (lightweight, no games detail needed yet)
+    // Get all needed data in one call per endpoint — avoids fetching individual match IDs
     const [runningList, upcomingList] = await Promise.all([
-      pandaFetch('/csgo/matches/running?per_page=50&include=opponents'),
+      pandaFetch('/csgo/matches/running?per_page=50&include=opponents,games,picks_bans'),
       pandaFetch('/csgo/matches/upcoming?per_page=30&sort=begin_at&include=opponents'),
     ]);
 
-    const sweRunningIds  = runningList.filter(hasSweTeam).map(m => m.id);
+    const sweRunning     = runningList.filter(hasSweTeam);
     const sweUpcomingRaw = upcomingList.filter(hasSweTeam);
-
-    // Step 2: fetch full details for each live Swedish match individually
-    // Full match endpoint returns picks_bans and accurate game.teams scores
-    const sweRunning = sweRunningIds.length
-      ? await Promise.all(sweRunningIds.map(id =>
-          pandaFetch(`/csgo/matches/${id}`)
-        ))
-      : [];
 
     const scoreKey = buildScoreKey(sweRunning);
     if (scoreKey !== lastScoreKey) {
