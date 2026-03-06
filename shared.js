@@ -146,6 +146,67 @@ function swePill(info, align = 'left') {
   return `<span class="swe-pill ${cls}" style="${align==='right'?'align-self:flex-end':''}">${text}</span>`;
 }
 
+// ── HISTORY HELPERS (used by history.html) ───────────────────────────────
+function extractMapScore(match) {
+  const t1 = match.opponents?.[0]?.opponent;
+  const t2 = match.opponents?.[1]?.opponent;
+  let t1Maps = 0, t2Maps = 0;
+  if (match.results?.length) {
+    match.results.forEach(r => {
+      if (r.team_id === t1?.id)      t1Maps = r.score;
+      else if (r.team_id === t2?.id) t2Maps = r.score;
+    });
+  }
+  if (t1Maps === 0 && t2Maps === 0 && match.games?.length) {
+    match.games.forEach(g => {
+      if (!g.winner) return;
+      if (g.winner.id === t1?.id) t1Maps++;
+      else if (g.winner.id === t2?.id) t2Maps++;
+    });
+  }
+  return { t1Maps, t2Maps };
+}
+
+function extractRoundScore(game, t1Id, t2Id) {
+  let r1 = 0, r2 = 0;
+  if (game.teams?.length) {
+    game.teams.forEach(t => {
+      const tid   = t.team?.id ?? t.team_id ?? t.id;
+      const score = t.score ?? t.team_score ?? 0;
+      if (tid === t1Id)      r1 = Math.max(r1, score);
+      else if (tid === t2Id) r2 = Math.max(r2, score);
+    });
+  }
+  if (game.results?.length) {
+    game.results.forEach(r => {
+      const tid   = r.team_id ?? r.team?.id;
+      const score = r.score ?? 0;
+      if (tid === t1Id)      r1 = Math.max(r1, score);
+      else if (tid === t2Id) r2 = Math.max(r2, score);
+    });
+  }
+  return { r1, r2 };
+}
+
+function countryFlag(code) {
+  if (!code || code.length !== 2) return '';
+  return [...code.toUpperCase()].map(c => String.fromCodePoint(0x1F1E6 - 65 + c.charCodeAt(0))).join('');
+}
+
+const REGION_MAP = {
+  SE:'EU',DK:'EU',NO:'EU',FI:'EU',DE:'EU',FR:'EU',NL:'EU',BE:'EU',PL:'EU',GB:'EU',
+  US:'NA',CA:'NA',MX:'NA',BR:'SA',AR:'SA',CL:'SA',
+  CN:'APAC',KR:'APAC',AU:'APAC',JP:'APAC',
+  RU:'CIS',UA:'CIS',KZ:'CIS',
+};
+
+function teamLocationBadge(team) {
+  if (!team?.location) return '';
+  const flag   = countryFlag(team.location);
+  const region = REGION_MAP[team.location.toUpperCase()] || team.location.toUpperCase();
+  return `<span class="location-badge">${flag} ${region}</span>`;
+}
+
 function teamLogo(t, cls = 'team-logo') {
   const url  = t?.image_url || t?.logoUrl;
   const name = t?.name || '?';

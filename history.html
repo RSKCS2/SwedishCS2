@@ -85,7 +85,7 @@
     .rt-name.swe-hl{color:var(--accent2)}
     .swe-pill{display:inline-flex;align-items:center;gap:4px;font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border-radius:3px;white-space:nowrap}
     .swe-pill.full{background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.3);color:var(--accent2)}
-    .swe-pill.partial{background:rgba(240,208,0,.08);border:1px solid rgba(240,208,0,.25);color:var(--accent)}
+    .swe-pill.partial{background:rgba(100,149,237,.1);border:1px solid rgba(100,149,237,.3);color:#7aabff}
     .location-badge{font-family:var(--display);font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.04em}
 
     .result-score{display:flex;flex-direction:column;align-items:center;padding:0 10px;min-width:72px}
@@ -149,7 +149,7 @@
 
   <div id="stats-section" class="stats-section" style="display:none">
     <div class="period-tabs">
-      <button class="period-tab active" onclick="setPeriod('all')">All time</button>
+      <button class="period-tab active" onclick="setPeriod('year')">This year</button>
       <button class="period-tab" onclick="setPeriod('month')">This month</button>
       <button class="period-tab" onclick="setPeriod('week')">This week</button>
       <button class="period-tab" onclick="setPeriod('day')">Today</button>
@@ -171,15 +171,18 @@
 <script>
 let allMatches  = [];
 let searchQuery = '';
-let activePeriod = 'all';
+let activePeriod = 'year';
 
 window.addEventListener('DOMContentLoaded', fetchHistory);
 
 async function fetchHistory() {
   try {
     await ensureSwedishData();
+    // Fetch past year of matches
+    const now = new Date();
+    const yearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()).toISOString().split('T')[0];
     const data = await pandaFetch(
-      '/csgo/matches/past?per_page=100&sort=-end_at&include=games,opponents'
+      '/csgo/matches/past?per_page=50&sort=-end_at&include=games,opponents,results&range[end_at]=' + yearAgo + ',' + now.toISOString().split('T')[0]
     );
     allMatches = data.filter(hasSweTeam);
     document.getElementById('stats-section').style.display = 'flex';
@@ -188,9 +191,7 @@ async function fetchHistory() {
     document.getElementById('content').innerHTML = `
       <div class="state-card">
         <div class="icon">⚠️</div><h3>Connection Error</h3>
-        <p>${err.status === undefined
-          ? 'Could not reach the Worker. Check the URL in shared.js.'
-          : `API error ${err.status}.`}</p>
+        <p>${err.status ? 'API error ' + err.status + '.' : 'Could not reach the Worker. Check the URL in shared.js.'}</p>
       </div>`;
   }
 }
@@ -199,28 +200,19 @@ function onSearch(val) { searchQuery = val.toLowerCase().trim(); renderResults()
 
 function setPeriod(p) {
   activePeriod = p;
-  document.querySelectorAll('.period-tab').forEach(b => {
-    b.classList.toggle('active', b.textContent.toLowerCase().replace(' ','') === {
-      all:'alltime', month:'thismonth', week:'thisweek', day:'today'
-    }[p]);
+  document.querySelectorAll('.period-tab').forEach((b, i) => {
+    b.classList.toggle('active', ['year','month','week','day'][i] === p);
   });
   updateStats();
 }
 
-// Return start-of-period Date for filtering
 function periodStart(period) {
   const now = new Date();
-  if (period === 'day') {
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  } else if (period === 'week') {
-    const d = new Date(now);
-    d.setDate(d.getDate() - d.getDay()); // Sunday
-    d.setHours(0,0,0,0);
-    return d;
-  } else if (period === 'month') {
-    return new Date(now.getFullYear(), now.getMonth(), 1);
-  }
-  return null; // all time
+  if (period === 'day')   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (period === 'week')  { const d = new Date(now); d.setDate(d.getDate() - ((d.getDay()+6)%7)); d.setHours(0,0,0,0); return d; }
+  if (period === 'month') return new Date(now.getFullYear(), now.getMonth(), 1);
+  if (period === 'year')  return new Date(now.getFullYear(), 0, 1);
+  return null;
 }
 
 function matchesSearch(match) {
@@ -233,16 +225,15 @@ function matchesSearch(match) {
 
 function matchInPeriod(match, start) {
   if (!start) return true;
-  const d = new Date(match.end_at || match.begin_at);
-  return d >= start;
+  return new Date(match.end_at || match.begin_at) >= start;
 }
 
 function calcStats(matches) {
   let wins = 0, losses = 0;
   matches.forEach(m => {
     if (!m.winner) return;
-    const t1   = m.opponents?.[0]?.opponent;
-    const t2   = m.opponents?.[1]?.opponent;
+    const t1 = m.opponents?.[0]?.opponent;
+    const t2 = m.opponents?.[1]?.opponent;
     const sweT = sweInfo(t1) ? t1 : sweInfo(t2) ? t2 : null;
     if (!sweT) return;
     if (m.winner.id === sweT.id) wins++; else losses++;
@@ -262,17 +253,17 @@ function updateStats() {
 }
 
 function renderResults() {
-  const filtered = allMatches.filter(matchesSearch);
+  const start    = periodStart(activePeriod);
+  const filtered = allMatches.filter(m => matchesSearch(m) && matchInPeriod(m, start));
   updateStats();
 
   if (!filtered.length) {
     document.getElementById('content').innerHTML = `
       <div class="state-card"><div class="icon">📂</div><h3>No Results Found</h3>
-      <p>${searchQuery ? `No matches for "${searchQuery}".` : 'No Swedish matches in the last 100 results.'}</p></div>`;
+      <p>${searchQuery ? 'No matches for "' + searchQuery + '".' : 'No Swedish matches in this period.'}</p></div>`;
     return;
   }
 
-  // Group by date
   const groups = {};
   filtered.forEach(m => {
     const d   = m.end_at ? new Date(m.end_at) : new Date(m.begin_at);
@@ -286,8 +277,17 @@ function renderResults() {
     html += `<div class="date-group">${date}</div>`;
     matches.forEach((m, i) => { html += renderResultCard(m, gi*100 + i*40); });
   });
-  html += `<div class="pagination-info">Showing ${filtered.length} Swedish matches</div>`;
+  html += `<div class="pagination-info">Showing ${filtered.length} matches</div>`;
   document.getElementById('content').innerHTML = html;
+}
+
+// Re-render when period tab changes
+function setPeriod(p) {
+  activePeriod = p;
+  document.querySelectorAll('.period-tab').forEach((b, i) => {
+    b.classList.toggle('active', ['year','month','week','day'][i] === p);
+  });
+  renderResults();
 }
 
 function renderResultCard(match, delay) {
@@ -295,27 +295,24 @@ function renderResultCard(match, delay) {
   const t2    = match.opponents?.[1]?.opponent;
   const t1swe = sweInfo(t1);
   const t2swe = sweInfo(t2);
-
   const { t1Maps, t2Maps } = extractMapScore(match);
   const t1Win  = match.winner?.id === t1?.id;
   const t2Win  = match.winner?.id === t2?.id;
-
   const d          = match.end_at ? new Date(match.end_at) : new Date(match.begin_at);
   const timeStr    = d.toLocaleTimeString('sv-SE', { hour:'2-digit', minute:'2-digit' });
   const tournament = match.tournament?.name || match.league?.name || 'CS2';
-  const bo         = match.number_of_games ? `BO${match.number_of_games}` : '';
+  const bo         = match.number_of_games ? 'BO' + match.number_of_games : '';
   const cardId     = 'rc-' + match.id;
 
   const logo = t => t?.image_url
     ? `<img class="rt-logo" src="${t.image_url}" alt="${t.name||''}" onerror="this.style.display='none'" />`
     : `<div class="rt-logo-ph">${(t?.name||'?')[0].toUpperCase()}</div>`;
 
-  // Map scores
-  const games    = (match.games||[]).filter(g => g.status !== 'not_started' && g.status !== 'canceled');
-  let mapsHtml   = '';
+  const games = (match.games||[]).filter(g => g.status !== 'not_started' && g.status !== 'canceled');
+  let mapsHtml = '';
   if (games.length) {
     const items = games.map(g => {
-      const mn = (g.map?.name||'?').replace('de_','').replace('cs_','').toUpperCase();
+      const mn = (g.map?.name||'?').replace(/^de_|^cs_/i,'').toUpperCase();
       const { r1, r2 } = extractRoundScore(g, t1?.id, t2?.id);
       return `<div class="map-pill">
         <div class="mp-name">${mn}</div>
@@ -327,9 +324,7 @@ function renderResultCard(match, delay) {
       </div>`;
     }).join('');
     mapsHtml = `
-      <div class="result-card__maps" id="${cardId}-maps">
-        <div class="maps-grid">${items}</div>
-      </div>
+      <div class="result-card__maps" id="${cardId}-maps"><div class="maps-grid">${items}</div></div>
       <button class="expand-btn" onclick="toggleMaps('${cardId}')">
         <span>MAP SCORES (${games.length})</span>
         <span class="chevron" id="${cardId}-chev">▾</span>
@@ -348,8 +343,7 @@ function renderResultCard(match, delay) {
         <div class="rt">
           <div class="rt-namerow">${logo(t1)}<span class="${t1Class}">${t1?.name||'TBD'}</span></div>
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-            ${swePill(t1swe)}
-            ${!t1swe ? teamLocationBadge(t1) : ''}
+            ${swePill(t1swe)}${!t1swe ? teamLocationBadge(t1) : ''}
           </div>
         </div>
         <div class="result-score">
@@ -363,8 +357,7 @@ function renderResultCard(match, delay) {
         <div class="rt right">
           <div class="rt-namerow">${logo(t2)}<span class="${t2Class}">${t2?.name||'TBD'}</span></div>
           <div style="display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap">
-            ${!t2swe ? teamLocationBadge(t2) : ''}
-            ${swePill(t2swe,'right')}
+            ${!t2swe ? teamLocationBadge(t2) : ''}${swePill(t2swe,'right')}
           </div>
         </div>
       </div>
