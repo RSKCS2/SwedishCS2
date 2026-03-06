@@ -246,15 +246,9 @@ function countryFlag(code) {
   return [...code.toUpperCase()].map(c => String.fromCodePoint(0x1F1E6 - 65 + c.charCodeAt(0))).join('');
 }
 
-const REGION_MAP = {
-  SE:'EU',DK:'EU',NO:'EU',FI:'EU',DE:'EU',FR:'EU',NL:'EU',BE:'EU',PL:'EU',GB:'EU',
-  US:'NA',CA:'NA',MX:'NA',BR:'SA',AR:'SA',CL:'SA',
-  CN:'APAC',KR:'APAC',AU:'APAC',JP:'APAC',RU:'CIS',UA:'CIS',KZ:'CIS',
-};
-
 function teamLocationBadge(team) {
   if (!team?.location) return '';
-  const flag   = countryFlag(team.location);
-  const region = REGION_MAP[team.location.toUpperCase()] || team.location.toUpperCase();
-  return `<span class="location-badge">${flag} ${region}</span>`;
+  const code = team.location.toUpperCase();
+  const flag = countryFlag(code);
+  return `<span class="location-badge">${flag} ${code}</span>`;
 }

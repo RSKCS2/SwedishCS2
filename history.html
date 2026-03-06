@@ -167,8 +167,9 @@
 
 <script src="shared.js"></script>
 <script>
-const HISTORY_KEY      = 'swe_history';
-const HISTORY_FETCH_KEY = 'swe_history_fetched'; // timestamp of last full fetch
+const CACHE_VERSION    = 'v3';  // bump this to force a fresh fetch after logic changes
+const HISTORY_KEY      = 'swe_history_' + CACHE_VERSION;
+const HISTORY_FETCH_KEY = 'swe_history_fetched_' + CACHE_VERSION;
 const HISTORY_STALE_MS  = 2 * 60 * 60 * 1000;    // 2h — history doesn't change by the minute
 const PERIODS = ['year','9m','6m','3m','month','week','day'];
 const PAGE_SIZE = 25;
