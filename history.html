@@ -201,24 +201,33 @@ async function fetchAndMerge() {
 
     const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
     const today     = new Date().toISOString().split('T')[0];
-
     const storedIds = new Set(allMatches.map(m => m.id));
-    let page = 1, newMatches = [];
 
-    while (true) {
-      const batch = await pandaFetch(
-        `/csgo/matches/past?per_page=50&sort=-end_at&page=${page}&include=opponents,results&range[end_at]=${yearStart},${today}`
-      );
-      if (!batch.length) break;
+    // Fetch per Swedish team ID — guarantees we get every match for every
+    // Swedish-player team, no matter how many non-Swedish matches exist in between.
+    const sweTeamIds = Object.keys(_sweTeamData);
+    const newMatches = [];
 
-      const sweeBatch = batch.filter(hasSweTeam);
-      newMatches.push(...sweeBatch);
-
-      const allKnown = batch.every(m => storedIds.has(m.id));
-      if (allKnown || batch.length < 50) break;
-
-      page++;
-      if (page > 10) break;
+    // Batch team IDs into groups of 10 to keep API call count low
+    // PandaScore supports filter[opponent_id][]=id1&filter[opponent_id][]=id2 …
+    const CHUNK = 10;
+    for (let i = 0; i < sweTeamIds.length; i += CHUNK) {
+      const chunk = sweTeamIds.slice(i, i + CHUNK);
+      const qp = chunk.map(id => `filter[opponent_id][]=${id}`).join('&');
+      let page = 1;
+      while (true) {
+        const batch = await pandaFetch(
+          `/csgo/matches/past?per_page=50&sort=-end_at&page=${page}&include=opponents,results&range[end_at]=${yearStart},${today}&${qp}`
+        );
+        if (!batch.length) break;
+        // Only keep matches where at least one opponent is a Swedish team
+        batch.filter(hasSweTeam).forEach(m => newMatches.push(m));
+        // Stop paging this chunk if we've seen all these matches before
+        const allKnown = batch.every(m => storedIds.has(m.id));
+        if (allKnown || batch.length < 50) break;
+        page++;
+        if (page > 6) break; // 300 matches per chunk is more than enough
+      }
     }
 
     const byId = {};
