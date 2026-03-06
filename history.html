@@ -85,7 +85,8 @@
     .rt-name.swe-hl{color:var(--accent2)}
     .swe-pill{display:inline-flex;align-items:center;gap:4px;font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border-radius:3px;white-space:nowrap}
     .swe-pill.full{background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.3);color:var(--accent2)}
-    .swe-pill.partial{background:rgba(100,149,237,.1);border:1px solid rgba(100,149,237,.3);color:#7aabff}
+    .swe-pill.majority{background:rgba(100,149,237,.1);border:1px solid rgba(100,149,237,.3);color:#7aabff}
+    .swe-pill.partial{background:rgba(240,208,0,.08);border:1px solid rgba(240,208,0,.25);color:var(--accent)}
     .location-badge{font-family:var(--display);font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.04em}
 
     .result-score{display:flex;flex-direction:column;align-items:center;padding:0 10px;min-width:72px}
@@ -169,30 +170,69 @@
 
 <script src="shared.js"></script>
 <script>
-let allMatches  = [];
-let searchQuery = '';
+// History accumulates in localStorage — grows over time, never wiped
+// Each visit fetches the latest 50 and merges with stored matches
+const HISTORY_KEY = 'swe_history';
+
+let allMatches   = [];
+let searchQuery  = '';
 let activePeriod = 'year';
 
-window.addEventListener('DOMContentLoaded', fetchHistory);
-
-async function fetchHistory() {
-  try {
-    await ensureSwedishData();
-    // Fetch past year of matches
-    const now = new Date();
-    const yearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()).toISOString().split('T')[0];
-    const data = await pandaFetch(
-      '/csgo/matches/past?per_page=50&sort=-end_at&include=games,opponents,results&range[end_at]=' + yearAgo + ',' + now.toISOString().split('T')[0]
-    );
-    allMatches = data.filter(hasSweTeam);
+window.addEventListener('DOMContentLoaded', () => {
+  // Show stored matches instantly
+  const stored = loadStoredHistory();
+  if (stored.length) {
+    allMatches = stored;
     document.getElementById('stats-section').style.display = 'flex';
     renderResults();
-  } catch (err) {
-    document.getElementById('content').innerHTML = `
-      <div class="state-card">
-        <div class="icon">⚠️</div><h3>Connection Error</h3>
-        <p>${err.status ? 'API error ' + err.status + '.' : 'Could not reach the Worker. Check the URL in shared.js.'}</p>
-      </div>`;
+  }
+  // Fetch fresh matches in background and merge
+  fetchAndMerge();
+});
+
+function loadStoredHistory() {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch(_) { return []; }
+}
+
+function saveHistory(matches) {
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(matches)); } catch(_) {}
+}
+
+async function fetchAndMerge() {
+  try {
+    await ensureSwedishData();
+    // Fetch latest 50 past matches
+    const fresh = await pandaFetch('/csgo/matches/past?per_page=50&sort=-end_at&include=games,opponents,results');
+    const sweeFresh = fresh.filter(hasSweTeam);
+
+    // Merge with stored — dedupe by match id, keep newest version
+    const stored = loadStoredHistory();
+    const byId = {};
+    stored.forEach(m => { byId[m.id] = m; });
+    sweeFresh.forEach(m => { byId[m.id] = m; }); // fresh overwrites stored
+    allMatches = Object.values(byId).sort((a,b) =>
+      new Date(b.end_at || b.begin_at) - new Date(a.end_at || a.begin_at)
+    );
+
+    saveHistory(allMatches);
+    document.getElementById('stats-section').style.display = 'flex';
+    renderResults();
+
+    const count = allMatches.length;
+    const info = document.getElementById('history-info');
+    if (info) info.textContent = count + ' matches stored';
+  } catch(err) {
+    console.error('[SWE History] Fetch error:', err);
+    if (!allMatches.length) {
+      document.getElementById('content').innerHTML = `
+        <div class="state-card">
+          <div class="icon">⚠️</div><h3>Connection Error</h3>
+          <p>${err.status ? 'API error ' + err.status + '.' : 'Could not reach the Worker.'}</p>
+        </div>`;
+    }
   }
 }
 
@@ -203,7 +243,7 @@ function setPeriod(p) {
   document.querySelectorAll('.period-tab').forEach((b, i) => {
     b.classList.toggle('active', ['year','month','week','day'][i] === p);
   });
-  updateStats();
+  renderResults();
 }
 
 function periodStart(period) {
@@ -223,11 +263,6 @@ function matchesSearch(match) {
   return t1.includes(searchQuery) || t2.includes(searchQuery) || tour.includes(searchQuery);
 }
 
-function matchInPeriod(match, start) {
-  if (!start) return true;
-  return new Date(match.end_at || match.begin_at) >= start;
-}
-
 function calcStats(matches) {
   let wins = 0, losses = 0;
   matches.forEach(m => {
@@ -241,9 +276,7 @@ function calcStats(matches) {
   return { total: matches.length, wins, losses };
 }
 
-function updateStats() {
-  const start    = periodStart(activePeriod);
-  const filtered = allMatches.filter(m => matchesSearch(m) && matchInPeriod(m, start));
+function updateStats(filtered) {
   const { total, wins, losses } = calcStats(filtered);
   const wr = (wins + losses) > 0 ? Math.round(wins/(wins+losses)*100)+'%' : '—';
   document.getElementById('stat-total').textContent   = total;
@@ -254,13 +287,18 @@ function updateStats() {
 
 function renderResults() {
   const start    = periodStart(activePeriod);
-  const filtered = allMatches.filter(m => matchesSearch(m) && matchInPeriod(m, start));
-  updateStats();
+  const filtered = allMatches.filter(m => {
+    if (!matchesSearch(m)) return false;
+    if (start && new Date(m.end_at || m.begin_at) < start) return false;
+    return true;
+  });
+
+  updateStats(filtered);
 
   if (!filtered.length) {
     document.getElementById('content').innerHTML = `
       <div class="state-card"><div class="icon">📂</div><h3>No Results Found</h3>
-      <p>${searchQuery ? 'No matches for "' + searchQuery + '".' : 'No Swedish matches in this period.'}</p></div>`;
+      <p>${searchQuery ? 'No matches for "' + searchQuery + '".' : 'No Swedish matches in this period yet. Visit again after matches are played to build up history.'}</p></div>`;
     return;
   }
 
@@ -277,17 +315,8 @@ function renderResults() {
     html += `<div class="date-group">${date}</div>`;
     matches.forEach((m, i) => { html += renderResultCard(m, gi*100 + i*40); });
   });
-  html += `<div class="pagination-info">Showing ${filtered.length} matches</div>`;
+  html += `<div class="pagination-info">${filtered.length} matches · ${allMatches.length} total stored</div>`;
   document.getElementById('content').innerHTML = html;
-}
-
-// Re-render when period tab changes
-function setPeriod(p) {
-  activePeriod = p;
-  document.querySelectorAll('.period-tab').forEach((b, i) => {
-    b.classList.toggle('active', ['year','month','week','day'][i] === p);
-  });
-  renderResults();
 }
 
 function renderResultCard(match, delay) {
@@ -317,17 +346,13 @@ function renderResultCard(match, delay) {
       return `<div class="map-pill">
         <div class="mp-name">${mn}</div>
         <div class="mp-score">
-          <span class="${r1>r2?'w':'l'}">${r1}</span>
-          <span class="sep">:</span>
-          <span class="${r2>r1?'w':'l'}">${r2}</span>
-        </div>
-      </div>`;
+          <span class="${r1>r2?'w':'l'}">${r1}</span><span class="sep">:</span><span class="${r2>r1?'w':'l'}">${r2}</span>
+        </div></div>`;
     }).join('');
     mapsHtml = `
       <div class="result-card__maps" id="${cardId}-maps"><div class="maps-grid">${items}</div></div>
       <button class="expand-btn" onclick="toggleMaps('${cardId}')">
-        <span>MAP SCORES (${games.length})</span>
-        <span class="chevron" id="${cardId}-chev">▾</span>
+        <span>MAP SCORES (${games.length})</span><span class="chevron" id="${cardId}-chev">▾</span>
       </button>`;
   }
 

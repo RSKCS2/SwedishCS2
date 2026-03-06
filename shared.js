@@ -1,10 +1,26 @@
 /**
- * shared.js — Hybrid PandaScore + GRID helpers
+ * shared.js — Hybrid PandaScore + GRID, with localStorage caching
  *
- * PandaScore → detects Swedish players/teams by nationality
- * GRID       → provides live round scores and map names
+ * Cache keys:
+ *   swe_players        Swedish team data (1 hour TTL)
+ *   swe_live           Live+upcoming matches (30s / 5min TTL)
+ *   swe_history        Accumulated past matches (grows forever, never deleted)
  */
 const WORKER_URL = 'https://floral-moon-0400.epicminecraftboy12.workers.dev';
+
+// ── LOCAL STORAGE CACHE ───────────────────────────────────────────────────
+function cacheSet(key, data) {
+  try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data })); } catch(_) {}
+}
+function cacheGet(key, maxAgeMs) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const { ts, data } = JSON.parse(raw);
+    if (maxAgeMs && Date.now() - ts > maxAgeMs) return null;
+    return data;
+  } catch(_) { return null; }
+}
 
 // ── PANDASCORE REST ───────────────────────────────────────────────────────
 async function pandaFetch(path) {
@@ -22,19 +38,21 @@ async function gridFetch(endpoint, query, variables = {}) {
   });
   if (!res.ok) throw Object.assign(new Error('GRID error'), { status: res.status });
   const json = await res.json();
-  if (json.errors?.length) {
-    console.warn('[GRID] errors:', json.errors.map(e => e.message).join(', '));
-    // Don't throw — partial data is still useful
-  }
+  if (json.errors?.length) console.warn('[GRID] errors:', json.errors.map(e => e.message).join(', '));
   return json.data;
 }
 
-// ── SWEDISH PLAYER DATA (PandaScore) ──────────────────────────────────────
+// ── SWEDISH PLAYER DATA ───────────────────────────────────────────────────
 let _sweTeamData = {};
 let _sweLoaded   = false;
 
 async function ensureSwedishData() {
   if (_sweLoaded) return;
+
+  // Try cache first (1 hour TTL)
+  const cached = cacheGet('swe_players', 60 * 60 * 1000);
+  if (cached) { _sweTeamData = cached; _sweLoaded = true; return; }
+
   try {
     _sweTeamData = {};
     let page = 1;
@@ -51,7 +69,8 @@ async function ensureSwedishData() {
       page++;
     }
     Object.values(_sweTeamData).forEach(d => { d.isFull = d.count >= 5; });
-  } catch (e) { console.warn('[SWE] Failed to load Swedish player data:', e); }
+    cacheSet('swe_players', _sweTeamData);
+  } catch(e) { console.warn('[SWE] Failed to load Swedish player data:', e); }
   _sweLoaded = true;
 }
 
@@ -106,47 +125,20 @@ const QUERY_SERIES_STATE = `
 `;
 
 // ── TEAM NAME MATCHING ────────────────────────────────────────────────────
-// Normalize team names for fuzzy matching between PandaScore and GRID
 function normName(name) {
-  return (name || '')
-    .toLowerCase()
-    .replace(/esports?|gaming|team\s|\.|\s/g, '')
-    .trim();
+  return (name || '').toLowerCase().replace(/esports?|gaming|team\s|\.|\s/g, '').trim();
 }
 
-function findGridSeries(pandaTeam1Name, pandaTeam2Name, gridSeriesList) {
-  const n1 = normName(pandaTeam1Name);
-  const n2 = normName(pandaTeam2Name);
+function findGridSeries(t1Name, t2Name, gridSeriesList) {
+  const n1 = normName(t1Name), n2 = normName(t2Name);
   return gridSeriesList.find(s => {
     const gn = s.teams?.map(t => normName(t.baseInfo?.name)) || [];
-    return (gn.some(n => n === n1 || n.includes(n1) || n1.includes(n)) &&
-            gn.some(n => n === n2 || n.includes(n2) || n2.includes(n)));
+    return gn.some(n => n === n1 || n.includes(n1) || n1.includes(n)) &&
+           gn.some(n => n === n2 || n.includes(n2) || n2.includes(n));
   }) || null;
 }
 
-// ── MAP SCORE FROM PANDASCORE ─────────────────────────────────────────────
-function extractMapScore(match) {
-  const t1 = match.opponents?.[0]?.opponent;
-  const t2 = match.opponents?.[1]?.opponent;
-  let t1Maps = 0, t2Maps = 0;
-  if (match.results?.length) {
-    match.results.forEach(r => {
-      if (r.team_id === t1?.id)      t1Maps = r.score;
-      else if (r.team_id === t2?.id) t2Maps = r.score;
-    });
-  }
-  return { t1Maps, t2Maps };
-}
-
-// ── UI HELPERS ────────────────────────────────────────────────────────────
-function swePill(info, align = 'left') {
-  if (!info) return '';
-  const cls  = info.isFull ? 'full' : 'partial';
-  const text = info.isFull ? '🇸🇪 Full squad' : '🇸🇪 ' + info.count + '/5 Swedish';
-  return `<span class="swe-pill ${cls}" style="${align==='right'?'align-self:flex-end':''}">${text}</span>`;
-}
-
-// ── HISTORY HELPERS (used by history.html) ───────────────────────────────
+// ── SCORE HELPERS ─────────────────────────────────────────────────────────
 function extractMapScore(match) {
   const t1 = match.opponents?.[0]?.opponent;
   const t2 = match.opponents?.[1]?.opponent;
@@ -188,23 +180,12 @@ function extractRoundScore(game, t1Id, t2Id) {
   return { r1, r2 };
 }
 
-function countryFlag(code) {
-  if (!code || code.length !== 2) return '';
-  return [...code.toUpperCase()].map(c => String.fromCodePoint(0x1F1E6 - 65 + c.charCodeAt(0))).join('');
-}
-
-const REGION_MAP = {
-  SE:'EU',DK:'EU',NO:'EU',FI:'EU',DE:'EU',FR:'EU',NL:'EU',BE:'EU',PL:'EU',GB:'EU',
-  US:'NA',CA:'NA',MX:'NA',BR:'SA',AR:'SA',CL:'SA',
-  CN:'APAC',KR:'APAC',AU:'APAC',JP:'APAC',
-  RU:'CIS',UA:'CIS',KZ:'CIS',
-};
-
-function teamLocationBadge(team) {
-  if (!team?.location) return '';
-  const flag   = countryFlag(team.location);
-  const region = REGION_MAP[team.location.toUpperCase()] || team.location.toUpperCase();
-  return `<span class="location-badge">${flag} ${region}</span>`;
+// ── UI HELPERS ────────────────────────────────────────────────────────────
+function swePill(info, align = 'left') {
+  if (!info) return '';
+  const cls  = info.isFull ? 'full' : info.count >= 3 ? 'majority' : 'partial';
+  const text = info.isFull ? '🇸🇪 Full squad' : '🇸🇪 ' + info.count + '/5 Swedish';
+  return `<span class="swe-pill ${cls}" style="${align==='right'?'align-self:flex-end':''}">${text}</span>`;
 }
 
 function teamLogo(t, cls = 'team-logo') {
@@ -218,4 +199,22 @@ function teamLogo(t, cls = 'team-logo') {
 function formatMapName(raw) {
   if (!raw) return null;
   return raw.replace(/^de_|^cs_/i, '').toUpperCase();
+}
+
+function countryFlag(code) {
+  if (!code || code.length !== 2) return '';
+  return [...code.toUpperCase()].map(c => String.fromCodePoint(0x1F1E6 - 65 + c.charCodeAt(0))).join('');
+}
+
+const REGION_MAP = {
+  SE:'EU',DK:'EU',NO:'EU',FI:'EU',DE:'EU',FR:'EU',NL:'EU',BE:'EU',PL:'EU',GB:'EU',
+  US:'NA',CA:'NA',MX:'NA',BR:'SA',AR:'SA',CL:'SA',
+  CN:'APAC',KR:'APAC',AU:'APAC',JP:'APAC',RU:'CIS',UA:'CIS',KZ:'CIS',
+};
+
+function teamLocationBadge(team) {
+  if (!team?.location) return '';
+  const flag   = countryFlag(team.location);
+  const region = REGION_MAP[team.location.toUpperCase()] || team.location.toUpperCase();
+  return `<span class="location-badge">${flag} ${region}</span>`;
 }

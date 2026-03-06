@@ -33,7 +33,7 @@
     @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
 
     /* ── MAIN ── */
-    main{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:28px 20px 80px}
+    main{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:28px 20px 40px}
     .page-title{font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:22px;display:flex;align-items:center;gap:10px}
     .page-title::after{content:'';flex:1;height:1px;background:var(--border)}
     .section-label{font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);margin:28px 0 12px;display:flex;align-items:center;gap:10px}
@@ -68,7 +68,8 @@
     .team-name.swe-hl{color:var(--accent2)}
     .swe-pill{display:inline-flex;align-items:center;gap:4px;font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:3px;white-space:nowrap}
     .swe-pill.full{background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.3);color:var(--accent2)}
-    .swe-pill.partial{background:rgba(100,149,237,.1);border:1px solid rgba(100,149,237,.3);color:#7aabff}
+    .swe-pill.majority{background:rgba(100,149,237,.1);border:1px solid rgba(100,149,237,.3);color:#7aabff}
+    .swe-pill.partial{background:rgba(240,208,0,.08);border:1px solid rgba(240,208,0,.25);color:var(--accent)}
     .location-badge{font-family:var(--display);font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.04em}
 
     /* ── SCORE ── */
@@ -109,12 +110,6 @@
     .spinner{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
     @keyframes spin{to{transform:rotate(360deg)}}
 
-    /* ── STATUS BAR ── */
-    .status-bar{position:fixed;bottom:0;left:0;right:0;z-index:10;background:var(--surface);border-top:1px solid var(--border);padding:8px 24px;display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:12px;color:var(--muted)}
-    .poll-progress{flex:1;height:2px;background:var(--border);border-radius:1px;margin:0 16px;overflow:hidden}
-    .poll-fill{height:100%;background:var(--accent);border-radius:1px;transition:width 1s linear}
-    .poll-mode.fast{color:var(--accent2)}
-    .poll-mode.slow{color:var(--muted)}
 
     @media(max-width:600px){.match-card__top{flex-wrap:wrap}.match-meta{min-width:auto}.team-name{font-size:15px}.score-main{font-size:24px}}
   </style>
@@ -143,49 +138,45 @@
   <div id="content"><div class="state-card"><div class="spinner"></div><p>Fetching matches…</p></div></div>
 </main>
 
-<div class="status-bar">
-  <span class="poll-mode" id="poll-mode">—</span>
-  <div class="poll-progress"><div class="poll-fill" id="poll-fill" style="width:100%"></div></div>
-  <span id="poll-countdown">—</span>
-</div>
 
 <script src="shared.js"></script>
 <script>
-const INTERVAL_LIVE     = 30;
-const INTERVAL_UPCOMING = 300;
-const INTERVAL_IDLE     = 900;
+const LIVE_TTL     = 30  * 1000;
+const UPCOMING_TTL = 5   * 60 * 1000;
 
-let pollTimer = null, tickTimer = null;
-let pollInterval = INTERVAL_UPCOMING, countdown = INTERVAL_UPCOMING;
+let pollTimer = null;
 let lastScoreKey = '';
 
-window.addEventListener('DOMContentLoaded', () => { fetchMatches(); });
+window.addEventListener('DOMContentLoaded', () => {
+  // Show cached data instantly while fresh fetch happens in background
+  const cached = cacheGet('swe_live');
+  if (cached) renderMatches(cached.live, cached.upcoming);
+  fetchMatches();
+});
 
 async function fetchMatches() {
   try {
-    // Step 1: PandaScore detects Swedish matches
     await ensureSwedishData();
+
     const [runningList, upcomingList] = await Promise.all([
       pandaFetch('/csgo/matches/running?per_page=50&include=opponents,results'),
       pandaFetch('/csgo/matches/upcoming?per_page=30&sort=begin_at&include=opponents'),
     ]);
+
     const sweRunning  = runningList.filter(hasSweTeam);
     const sweUpcoming = upcomingList.filter(hasSweTeam);
 
-    // Step 2: GRID fetches CS2 series for same window (for live round scores)
-    const now = new Date();
-    const gte = new Date(now - 3 * 60 * 60 * 1000).toISOString();
-    const lte = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    // GRID: get CS2 series for live score enrichment
     let gridSeries = [];
     try {
-      const gridData = await gridFetch('/central', QUERY_CS2_SERIES, { gte, lte });
-      gridSeries = (gridData?.allSeries?.edges || [])
-        .map(e => e.node)
-        .filter(s => s.title?.nameShortened === 'cs2');
-    } catch (e) { console.warn('[GRID] Central fetch failed:', e); }
+      const now = new Date();
+      const gte = new Date(now - 3 * 60 * 60 * 1000).toISOString();
+      const lte = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      const gd  = await gridFetch('/central', QUERY_CS2_SERIES, { gte, lte });
+      gridSeries = (gd?.allSeries?.edges || []).map(e => e.node).filter(s => s.title?.nameShortened === 'cs2');
+    } catch(e) { console.warn('[GRID] Central failed:', e); }
 
-    // Step 3: Match each live PandaScore match to a GRID series by team name
-    // Then fetch GRID series-state for live round scores
+    // Enrich each live match with GRID series state (round scores)
     const enriched = await Promise.all(sweRunning.map(async match => {
       const t1 = match.opponents?.[0]?.opponent;
       const t2 = match.opponents?.[1]?.opponent;
@@ -195,10 +186,13 @@ async function fetchMatches() {
         try {
           const sd = await gridFetch('/live', QUERY_SERIES_STATE, { id: gridMatch.id });
           state = sd?.seriesState || null;
-        } catch (e) { console.warn('[GRID] State fetch failed for', gridMatch.id, e); }
+        } catch(e) { console.warn('[GRID] State failed:', e); }
       }
       return { ...match, gridMatch, state };
     }));
+
+    // Cache for history page and cross-page navigation
+    cacheSet('swe_live', { live: enriched, upcoming: sweUpcoming });
 
     const scoreKey = JSON.stringify(enriched.map(m => ({
       id: m.id,
@@ -210,47 +204,25 @@ async function fetchMatches() {
       renderMatches(enriched, sweUpcoming);
     }
 
-    document.getElementById('last-update').textContent =
-      'Updated ' + new Date().toLocaleTimeString('sv-SE');
+    document.getElementById('last-update').textContent = 'Updated ' + new Date().toLocaleTimeString('sv-SE');
 
-    schedulePoll(enriched.length > 0
-      ? INTERVAL_LIVE
-      : sweUpcoming.length > 0 ? INTERVAL_UPCOMING : INTERVAL_IDLE);
+    const interval = enriched.length > 0 ? LIVE_TTL : sweUpcoming.length > 0 ? UPCOMING_TTL : 15 * 60 * 1000;
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(fetchMatches, interval);
 
-  } catch (err) {
+  } catch(err) {
     console.error('[SWE CS2] Fetch error:', err);
-    document.getElementById('content').innerHTML = `
-      <div class="state-card">
-        <div class="icon">⚠️</div>
-        <h3>Connection Error</h3>
-        <p>${err.status ? 'API error ' + err.status + '.' : 'Could not reach the Worker. Check the URL in shared.js.'}</p>
-      </div>`;
-    schedulePoll(INTERVAL_IDLE);
-  }
-}
-
-function schedulePoll(interval) {
-  clearTimeout(pollTimer); clearInterval(tickTimer);
-  pollInterval = interval; countdown = interval;
-  updatePollUI();
-  pollTimer = setTimeout(() => fetchMatches(), interval * 1000);
-  tickTimer = setInterval(() => { countdown = Math.max(0, countdown - 1); updatePollUI(); }, 1000);
-}
-
-function updatePollUI() {
-  document.getElementById('poll-fill').style.width = (countdown / pollInterval * 100) + '%';
-  if (pollInterval === INTERVAL_LIVE) {
-    document.getElementById('poll-countdown').textContent = countdown + 's';
-    document.getElementById('poll-mode').textContent = '● LIVE — updating every 30s';
-    document.getElementById('poll-mode').className = 'poll-mode fast';
-  } else if (pollInterval === INTERVAL_UPCOMING) {
-    document.getElementById('poll-countdown').textContent = Math.ceil(countdown/60) + 'min';
-    document.getElementById('poll-mode').textContent = 'Upcoming — checking every 5min';
-    document.getElementById('poll-mode').className = 'poll-mode slow';
-  } else {
-    document.getElementById('poll-countdown').textContent = Math.ceil(countdown/60) + 'min';
-    document.getElementById('poll-mode').textContent = 'No matches — checking every 15min';
-    document.getElementById('poll-mode').className = 'poll-mode slow';
+    // Only show error if we have no cached data to show
+    if (!cacheGet('swe_live')) {
+      document.getElementById('content').innerHTML = `
+        <div class="state-card">
+          <div class="icon">⚠️</div>
+          <h3>Connection Error</h3>
+          <p>${err.status ? 'API error ' + err.status + '.' : 'Could not reach the Worker.'}</p>
+        </div>`;
+    }
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(fetchMatches, 60 * 1000);
   }
 }
 
@@ -285,76 +257,55 @@ function renderCard(match, live, delay) {
     ? 'LIVE'
     : new Date(match.begin_at).toLocaleString('sv-SE', { weekday:'short', hour:'2-digit', minute:'2-digit' }).toUpperCase();
 
-  // GRID series state for live round scores
   const state      = match.state;
   const stateGames = state?.games || [];
 
-  // Build game list from GRID state — includes map name and round scores
   let mapsHtml = '';
   if (live && stateGames.length) {
-    const t1StateName = state?.teams?.find(t => normName(t.name) === normName(t1?.name))?.name
-                     || state?.teams?.[0]?.name;
-    const t2StateName = state?.teams?.find(t => normName(t.name) === normName(t2?.name))?.name
-                     || state?.teams?.[1]?.name;
+    const t1StateName = state?.teams?.find(t => normName(t.name) === normName(t1?.name))?.name || state?.teams?.[0]?.name;
+    const t2StateName = state?.teams?.find(t => normName(t.name) === normName(t2?.name))?.name || state?.teams?.[1]?.name;
 
     const mapItems = stateGames.map(g => {
-      const isLive  = g.started && !g.finished;
-      const isDone  = g.finished;
+      const isLive = g.started && !g.finished;
+      const isDone = g.finished;
       const r1 = g.teams?.find(t => t.name === t1StateName)?.score ?? null;
       const r2 = g.teams?.find(t => t.name === t2StateName)?.score ?? null;
       const mn = formatMapName(g.map?.name);
 
       if (isDone) {
         return `<div class="map-item">
-          <div class="map-name-row">
-            <span class="map-name">${mn || '—'}</span>
-            <span class="map-status done">END</span>
-          </div>
+          <div class="map-name-row"><span class="map-name">${mn||'—'}</span><span class="map-status done">END</span></div>
           <div class="map-score-row">
             <span class="map-score left ${r1>r2?'win':'lose'}">${r1??'—'}</span>
             <span class="map-dash">:</span>
             <span class="map-score right ${r2>r1?'win':'lose'}">${r2??'—'}</span>
-          </div>
-        </div>`;
+          </div></div>`;
       } else if (isLive) {
         const tot = Math.max(1, (r1||0) + (r2||0));
         return `<div class="map-item">
-          <div class="map-name-row">
-            <span class="map-name" style="color:#fff">${mn || '—'}</span>
-            <span class="map-status live">● LIVE</span>
-          </div>
+          <div class="map-name-row"><span class="map-name" style="color:#fff">${mn||'—'}</span><span class="map-status live">● LIVE</span></div>
           <div class="map-score-row">
-            <span class="map-score left">${r1??'—'}</span>
-            <span class="map-dash">:</span>
-            <span class="map-score right">${r2??'—'}</span>
+            <span class="map-score left">${r1??'—'}</span><span class="map-dash">:</span><span class="map-score right">${r2??'—'}</span>
           </div>
           <div class="round-bar">
             <div class="ct" style="width:${Math.round((r1||0)/tot*100)}%"></div>
             <div class="t"  style="width:${Math.round((r2||0)/tot*100)}%"></div>
-          </div>
-        </div>`;
+          </div></div>`;
       } else {
         return `<div class="map-item map-pending">
-          <div class="map-name-row">
-            <span class="map-name">${mn || 'TBD'}</span>
-            <span class="map-status pending">NEXT</span>
-          </div>
-          <div style="height:22px"></div>
-        </div>`;
+          <div class="map-name-row"><span class="map-name">${mn||'TBD'}</span><span class="map-status pending">NEXT</span></div>
+          <div style="height:22px"></div></div>`;
       }
     }).join('');
     mapsHtml = `<div class="match-card__maps">${mapItems}</div>`;
-  } else if (live && !stateGames.length) {
-    // PandaScore says it's live but no GRID match found — show map dots
+  } else if (live) {
     const dots = Array.from({ length: match.number_of_games || 1 }, (_, i) => {
-      const done = i < t1Maps + t2Maps;
-      const cur  = i === t1Maps + t2Maps;
+      const done = i < t1Maps + t2Maps, cur = i === t1Maps + t2Maps;
       const c = done ? 'var(--muted)' : cur ? 'var(--accent2)' : 'var(--border)';
       return `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};${cur?'box-shadow:0 0 7px var(--accent2)':''}"></span>`;
     }).join('');
     mapsHtml = `<div style="padding:9px 18px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px">
-      <span style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.1em;margin-right:2px">MAPS</span>${dots}
-    </div>`;
+      <span style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.1em;margin-right:2px">MAPS</span>${dots}</div>`;
   }
 
   return `
@@ -367,10 +318,7 @@ function renderCard(match, live, delay) {
       </div>
       <div class="teams-section">
         <div class="team-col">
-          <div class="team-row">
-            ${teamLogo(t1)}
-            <span class="team-name${t1Win?' winner':''}${t1swe?' swe-hl':''}">${t1?.name||'TBD'}</span>
-          </div>
+          <div class="team-row">${teamLogo(t1)}<span class="team-name${t1Win?' winner':''}${t1swe?' swe-hl':''}">${t1?.name||'TBD'}</span></div>
           ${swePill(t1swe)}
         </div>
         <div class="score-section">
@@ -382,11 +330,8 @@ function renderCard(match, live, delay) {
           <div class="score-bo">${bo}</div>
         </div>
         <div class="team-col right">
-          <div class="team-row right">
-            ${teamLogo(t2)}
-            <span class="team-name${t2Win?' winner':''}${t2swe?' swe-hl':''}">${t2?.name||'TBD'}</span>
-          </div>
-          ${swePill(t2swe, 'right')}
+          <div class="team-row right">${teamLogo(t2)}<span class="team-name${t2Win?' winner':''}${t2swe?' swe-hl':''}">${t2?.name||'TBD'}</span></div>
+          ${swePill(t2swe,'right')}
         </div>
       </div>
     </div>
