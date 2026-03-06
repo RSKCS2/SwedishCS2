@@ -5,7 +5,7 @@
  */
 
 // ← Replace with your Cloudflare Worker URL after deploying
-const WORKER_URL = 'floral-moon-0400.epicminecraftboy12.workers.dev';
+const WORKER_URL = 'https://floral-moon-0400.epicminecraftboy12.workers.dev';
 
 /**
  * Fetch from PandaScore via the Worker proxy.
