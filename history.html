@@ -100,6 +100,10 @@
     .spinner{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
     @keyframes spin{to{transform:rotate(360deg)}}
     .pagination-info{font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;padding:14px 0}
+    .pagination-controls{display:flex;align-items:center;justify-content:center;gap:16px;padding:20px 0}
+    .page-btn{font-family:var(--display);font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 18px;border-radius:4px;cursor:pointer;transition:all .15s}
+    .page-btn:hover{border-color:var(--accent);color:var(--accent)}
+    .page-info{font-family:var(--mono);font-size:12px;color:var(--muted)}
 
     @media(max-width:600px){
       .result-tournament{display:none}
@@ -163,12 +167,16 @@
 
 <script src="shared.js"></script>
 <script>
-const HISTORY_KEY = 'swe_history';
+const HISTORY_KEY      = 'swe_history';
+const HISTORY_FETCH_KEY = 'swe_history_fetched'; // timestamp of last full fetch
+const HISTORY_STALE_MS  = 2 * 60 * 60 * 1000;    // 2h — history doesn't change by the minute
 const PERIODS = ['year','9m','6m','3m','month','week','day'];
+const PAGE_SIZE = 25;
 
 let allMatches   = [];
 let searchQuery  = '';
 let activePeriod = 'year';
+let currentPage  = 1;
 
 window.addEventListener('DOMContentLoaded', () => {
   allMatches = loadAndPruneHistory();
@@ -176,7 +184,13 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('stats-section').style.display = 'flex';
     renderResults();
   }
-  fetchAndMerge();
+
+  // Only hit the API if cache is stale or empty
+  const lastFetch = parseInt(localStorage.getItem(HISTORY_FETCH_KEY) || '0', 10);
+  const isStale   = Date.now() - lastFetch > HISTORY_STALE_MS;
+  if (isStale || !allMatches.length) {
+    fetchAndMerge();
+  }
 });
 
 function loadAndPruneHistory() {
@@ -199,9 +213,10 @@ async function fetchAndMerge() {
   try {
     await ensureSwedishData();
 
-    const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
-    const today     = new Date().toISOString().split('T')[0];
-    const storedIds = new Set(allMatches.map(m => m.id));
+    const yearStart  = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
+    const today      = new Date().toISOString().split('T')[0];
+    const countBefore = allMatches.length;
+    const storedIds  = new Set(allMatches.map(m => m.id));
 
     const sweTeamIds = Object.entries(_sweTeamData)
       .filter(([, d]) => d.count >= 3)
@@ -210,7 +225,6 @@ async function fetchAndMerge() {
     const byId = {};
     allMatches.forEach(m => { byId[m.id] = m; });
 
-    // Fetch all pages for a single team, returns merged match map entries
     async function fetchTeam(teamId) {
       let page = 1;
       while (true) {
@@ -221,32 +235,41 @@ async function fetchAndMerge() {
           `&filter[opponent_id]=${teamId}`
         );
         if (!batch.length) break;
-        // Cache any logos we see
         batch.forEach(m => {
           m.opponents?.forEach(o => cacheLogoFromTeam(o?.opponent));
+          byId[m.id] = m;
         });
-        batch.forEach(m => { byId[m.id] = m; });
         if (batch.every(m => storedIds.has(m.id)) || batch.length < 50) break;
         page++;
         if (page > 5) break;
       }
     }
 
-    // Run 5 team fetches concurrently — much faster than sequential,
-    // without hammering the API.
-    const CONCURRENCY = 5;
-    for (let i = 0; i < sweTeamIds.length; i += CONCURRENCY) {
-      const chunk = sweTeamIds.slice(i, i + CONCURRENCY);
-      await Promise.allSettled(chunk.map(id => fetchTeam(id)));
-      // Re-render after each wave so results appear progressively
-      allMatches = Object.values(byId)
-        .filter(hasSweTeam)
-        .sort((a, b) => new Date(b.end_at || b.begin_at) - new Date(a.end_at || a.begin_at));
+    await Promise.allSettled(sweTeamIds.map(id => fetchTeam(id)));
+
+    const merged = Object.values(byId)
+      .filter(hasSweTeam)
+      .sort((a, b) => new Date(b.end_at || b.begin_at) - new Date(a.end_at || a.begin_at));
+
+    localStorage.setItem(HISTORY_FETCH_KEY, String(Date.now()));
+
+    // Only re-render if we actually got new matches — avoids nuking the DOM
+    // (and killing in-flight image requests) when nothing changed.
+    if (merged.length !== countBefore) {
+      allMatches = merged;
+      // Save lean version — strip image_url, teamLogo() reads from swe_logos cache
+      saveHistory(allMatches.map(m => ({
+        ...m,
+        opponents: m.opponents?.map(o => o?.opponent
+          ? { ...o, opponent: { ...o.opponent, image_url: undefined } }
+          : o),
+      })));
       document.getElementById('stats-section').style.display = 'flex';
       renderResults();
+    } else {
+      // Nothing new — still save the timestamp so we don't re-fetch for 2h
+      allMatches = merged;
     }
-
-    saveHistory(allMatches);
 
   } catch(err) {
     console.error('[SWE History] Fetch error:', err);
@@ -260,10 +283,11 @@ async function fetchAndMerge() {
   }
 }
 
-function onSearch(val) { searchQuery = val.toLowerCase().trim(); renderResults(); }
+function onSearch(val) { searchQuery = val.toLowerCase().trim(); currentPage = 1; renderResults(); }
 
 function setPeriod(p) {
   activePeriod = p;
+  currentPage  = 1;
   document.querySelectorAll('.period-tab').forEach((b, i) => {
     b.classList.toggle('active', PERIODS[i] === p);
   });
@@ -325,8 +349,13 @@ function renderResults() {
     return;
   }
 
+  // Paginate
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  currentPage      = Math.min(currentPage, totalPages);
+  const pageSlice  = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   const groups = {};
-  filtered.forEach(m => {
+  pageSlice.forEach(m => {
     const d   = m.end_at ? new Date(m.end_at) : new Date(m.begin_at);
     const key = d.toLocaleDateString('sv-SE', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
     if (!groups[key]) groups[key] = [];
@@ -336,10 +365,31 @@ function renderResults() {
   let html = '';
   Object.entries(groups).forEach(([date, matches], gi) => {
     html += `<div class="date-group">${date}</div>`;
-    matches.forEach((m, i) => { html += renderResultCard(m, gi * 50 + i * 30); });
+    matches.forEach((m, i) => { html += renderResultCard(m, gi * 30 + i * 20); });
   });
-  html += `<div class="pagination-info">${filtered.length} matcher visade · ${allMatches.length} lagrade i år</div>`;
+
+  // Pagination controls
+  if (totalPages > 1) {
+    const start = (currentPage - 1) * PAGE_SIZE + 1;
+    const end   = Math.min(currentPage * PAGE_SIZE, filtered.length);
+    html += `<div class="pagination-controls">`;
+    if (currentPage > 1)
+      html += `<button class="page-btn" onclick="goPage(${currentPage - 1})">← Föregående</button>`;
+    html += `<span class="page-info">${start}–${end} av ${filtered.length}</span>`;
+    if (currentPage < totalPages)
+      html += `<button class="page-btn" onclick="goPage(${currentPage + 1})">Nästa →</button>`;
+    html += `</div>`;
+  } else {
+    html += `<div class="pagination-info">${filtered.length} matcher · ${allMatches.length} lagrade i år</div>`;
+  }
+
   document.getElementById('content').innerHTML = html;
+}
+
+function goPage(p) {
+  currentPage = p;
+  renderResults();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function renderResultCard(match, delay) {
