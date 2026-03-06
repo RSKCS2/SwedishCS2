@@ -51,12 +51,9 @@ function sweInfo(teamName) {
 
 // ── GRAPHQL QUERIES ───────────────────────────────────────────────────────
 const QUERY_LIVE_SERIES = `
-  query LiveAndUpcoming($to: String) {
+  query LiveAndUpcoming {
     allSeries(
-      filter: {
-        titleId: 3,
-        scheduledBefore: $to
-      }
+      filter: { titleId: 3 }
       first: 50
       orderBy: { field: SCHEDULED_START_TIME, order: ASC }
     ) {
