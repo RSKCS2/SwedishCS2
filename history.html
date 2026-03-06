@@ -48,7 +48,7 @@
     .stats-section{margin-bottom:24px;display:flex;flex-direction:column;gap:10px}
 
     /* Period tabs */
-    .period-tabs{display:flex;gap:4px}
+    .period-tabs{display:flex;gap:4px;flex-wrap:wrap}
     .period-tab{font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:5px 14px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:all .15s}
     .period-tab:hover{color:var(--text);border-color:var(--text)}
     .period-tab.active{color:var(--accent);background:rgba(240,208,0,.08);border-color:rgba(240,208,0,.25)}
@@ -121,7 +121,7 @@
     @keyframes spin{to{transform:rotate(360deg)}}
     .pagination-info{font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;padding:14px 0}
 
-    @media(max-width:600px){.result-tournament{display:none}.rt-name{font-size:14px}.rs-main{font-size:18px}.stats-bar{flex-wrap:wrap}.stat-item{min-width:48%}}
+    @media(max-width:600px){.result-tournament{display:none}.rt-name{font-size:13px}.rs-main{font-size:16px}.stats-bar{flex-wrap:wrap}.stat-item{min-width:48%}.result-card__row{flex-wrap:wrap;gap:8px}.result-date{min-width:auto}.result-teams{width:100%}.rt-namerow{gap:5px}}
   </style>
 </head>
 <body>
@@ -151,6 +151,9 @@
   <div id="stats-section" class="stats-section" style="display:none">
     <div class="period-tabs">
       <button class="period-tab active" onclick="setPeriod('year')">This year</button>
+      <button class="period-tab" onclick="setPeriod('9m')">9 months</button>
+      <button class="period-tab" onclick="setPeriod('6m')">6 months</button>
+      <button class="period-tab" onclick="setPeriod('3m')">3 months</button>
       <button class="period-tab" onclick="setPeriod('month')">This month</button>
       <button class="period-tab" onclick="setPeriod('week')">This week</button>
       <button class="period-tab" onclick="setPeriod('day')">Today</button>
@@ -170,30 +173,32 @@
 
 <script src="shared.js"></script>
 <script>
-// History accumulates in localStorage — grows over time, never wiped
-// Each visit fetches the latest 50 and merges with stored matches
 const HISTORY_KEY = 'swe_history';
+const PERIODS = ['year','9m','6m','3m','month','week','day'];
 
 let allMatches   = [];
 let searchQuery  = '';
 let activePeriod = 'year';
 
 window.addEventListener('DOMContentLoaded', () => {
-  // Show stored matches instantly
-  const stored = loadStoredHistory();
-  if (stored.length) {
-    allMatches = stored;
+  allMatches = loadAndPruneHistory();
+  if (allMatches.length) {
     document.getElementById('stats-section').style.display = 'flex';
     renderResults();
   }
-  // Fetch fresh matches in background and merge
   fetchAndMerge();
 });
 
-function loadStoredHistory() {
+function loadAndPruneHistory() {
   try {
     const raw = localStorage.getItem(HISTORY_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    const matches = JSON.parse(raw);
+    // Auto-purge matches from previous years
+    const yearStart = new Date(new Date().getFullYear(), 0, 1);
+    const pruned = matches.filter(m => new Date(m.end_at || m.begin_at) >= yearStart);
+    if (pruned.length !== matches.length) saveHistory(pruned);
+    return pruned;
   } catch(_) { return []; }
 }
 
@@ -204,15 +209,37 @@ function saveHistory(matches) {
 async function fetchAndMerge() {
   try {
     await ensureSwedishData();
-    // Fetch latest 50 past matches
-    const fresh = await pandaFetch('/csgo/matches/past?per_page=50&sort=-end_at&include=games,opponents,results');
-    const sweeFresh = fresh.filter(hasSweTeam);
 
-    // Merge with stored — dedupe by match id, keep newest version
-    const stored = loadStoredHistory();
+    // Figure out what date range we still need to fetch
+    // Always fetch from Jan 1st of this year, but only what we might be missing
+    const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
+    const today     = new Date().toISOString().split('T')[0];
+
+    // Fetch all pages until we hit matches we already have stored
+    const storedIds = new Set(allMatches.map(m => m.id));
+    let page = 1, merged = false, newMatches = [];
+
+    while (true) {
+      const batch = await pandaFetch(
+        `/csgo/matches/past?per_page=50&sort=-end_at&page=${page}&include=games,opponents,results&range[end_at]=${yearStart},${today}`
+      );
+      if (!batch.length) break;
+
+      const sweeBatch = batch.filter(hasSweTeam);
+      newMatches.push(...sweeBatch);
+
+      // If all matches in this batch are already stored, we're caught up
+      const allKnown = batch.every(m => storedIds.has(m.id));
+      if (allKnown || batch.length < 50) break;
+
+      page++;
+      if (page > 10) break; // safety cap — 500 matches max
+    }
+
+    // Merge with stored — dedupe by id
     const byId = {};
-    stored.forEach(m => { byId[m.id] = m; });
-    sweeFresh.forEach(m => { byId[m.id] = m; }); // fresh overwrites stored
+    allMatches.forEach(m => { byId[m.id] = m; });
+    newMatches.forEach(m => { byId[m.id] = m; });
     allMatches = Object.values(byId).sort((a,b) =>
       new Date(b.end_at || b.begin_at) - new Date(a.end_at || a.begin_at)
     );
@@ -221,9 +248,6 @@ async function fetchAndMerge() {
     document.getElementById('stats-section').style.display = 'flex';
     renderResults();
 
-    const count = allMatches.length;
-    const info = document.getElementById('history-info');
-    if (info) info.textContent = count + ' matches stored';
   } catch(err) {
     console.error('[SWE History] Fetch error:', err);
     if (!allMatches.length) {
@@ -241,7 +265,7 @@ function onSearch(val) { searchQuery = val.toLowerCase().trim(); renderResults()
 function setPeriod(p) {
   activePeriod = p;
   document.querySelectorAll('.period-tab').forEach((b, i) => {
-    b.classList.toggle('active', ['year','month','week','day'][i] === p);
+    b.classList.toggle('active', PERIODS[i] === p);
   });
   renderResults();
 }
@@ -251,6 +275,9 @@ function periodStart(period) {
   if (period === 'day')   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   if (period === 'week')  { const d = new Date(now); d.setDate(d.getDate() - ((d.getDay()+6)%7)); d.setHours(0,0,0,0); return d; }
   if (period === 'month') return new Date(now.getFullYear(), now.getMonth(), 1);
+  if (period === '3m')    return new Date(now.getTime() - 90  * 24*60*60*1000);
+  if (period === '6m')    return new Date(now.getTime() - 180 * 24*60*60*1000);
+  if (period === '9m')    return new Date(now.getTime() - 270 * 24*60*60*1000);
   if (period === 'year')  return new Date(now.getFullYear(), 0, 1);
   return null;
 }
@@ -276,15 +303,6 @@ function calcStats(matches) {
   return { total: matches.length, wins, losses };
 }
 
-function updateStats(filtered) {
-  const { total, wins, losses } = calcStats(filtered);
-  const wr = (wins + losses) > 0 ? Math.round(wins/(wins+losses)*100)+'%' : '—';
-  document.getElementById('stat-total').textContent   = total;
-  document.getElementById('stat-wins').textContent    = wins;
-  document.getElementById('stat-losses').textContent  = losses;
-  document.getElementById('stat-winrate').textContent = wr;
-}
-
 function renderResults() {
   const start    = periodStart(activePeriod);
   const filtered = allMatches.filter(m => {
@@ -293,12 +311,17 @@ function renderResults() {
     return true;
   });
 
-  updateStats(filtered);
+  const { total, wins, losses } = calcStats(filtered);
+  const wr = (wins + losses) > 0 ? Math.round(wins/(wins+losses)*100)+'%' : '—';
+  document.getElementById('stat-total').textContent   = total;
+  document.getElementById('stat-wins').textContent    = wins;
+  document.getElementById('stat-losses').textContent  = losses;
+  document.getElementById('stat-winrate').textContent = wr;
 
   if (!filtered.length) {
     document.getElementById('content').innerHTML = `
       <div class="state-card"><div class="icon">📂</div><h3>No Results Found</h3>
-      <p>${searchQuery ? 'No matches for "' + searchQuery + '".' : 'No Swedish matches in this period yet. Visit again after matches are played to build up history.'}</p></div>`;
+      <p>${searchQuery ? 'No matches for "' + searchQuery + '".' : 'No Swedish matches in this period yet.'}</p></div>`;
     return;
   }
 
@@ -313,9 +336,9 @@ function renderResults() {
   let html = '';
   Object.entries(groups).forEach(([date, matches], gi) => {
     html += `<div class="date-group">${date}</div>`;
-    matches.forEach((m, i) => { html += renderResultCard(m, gi*100 + i*40); });
+    matches.forEach((m, i) => { html += renderResultCard(m, gi*50 + i*30); });
   });
-  html += `<div class="pagination-info">${filtered.length} matches · ${allMatches.length} total stored</div>`;
+  html += `<div class="pagination-info">${filtered.length} matches shown · ${allMatches.length} stored this year</div>`;
   document.getElementById('content').innerHTML = html;
 }
 
@@ -367,7 +390,7 @@ function renderResultCard(match, delay) {
       <div class="result-teams">
         <div class="rt">
           <div class="rt-namerow">${logo(t1)}<span class="${t1Class}">${t1?.name||'TBD'}</span></div>
-          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:2px">
             ${swePill(t1swe)}${!t1swe ? teamLocationBadge(t1) : ''}
           </div>
         </div>
@@ -381,7 +404,7 @@ function renderResultCard(match, delay) {
         </div>
         <div class="rt right">
           <div class="rt-namerow">${logo(t2)}<span class="${t2Class}">${t2?.name||'TBD'}</span></div>
-          <div style="display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap">
+          <div style="display:flex;gap:5px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin-top:2px">
             ${!t2swe ? teamLocationBadge(t2) : ''}${swePill(t2swe,'right')}
           </div>
         </div>

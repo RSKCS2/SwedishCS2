@@ -111,7 +111,24 @@
     @keyframes spin{to{transform:rotate(360deg)}}
 
 
-    @media(max-width:600px){.match-card__top{flex-wrap:wrap}.match-meta{min-width:auto}.team-name{font-size:15px}.score-main{font-size:24px}}
+    @media(max-width:600px){
+      .match-card__top{flex-wrap:wrap;padding:12px}
+      .match-meta{min-width:auto;width:100%}
+      .teams-section{width:100%}
+      .team-name{font-size:14px}
+      .team-logo,.team-logo-ph{width:28px;height:28px}
+      .score-main{font-size:22px}
+      .score-section{min-width:60px;padding:0 8px}
+      .map-item{min-width:80px;padding:8px 10px}
+      .map-score{font-size:18px}
+      header{padding:0 12px}
+      nav a{padding:5px 10px;font-size:13px}
+    }
+    @media(max-width:360px){
+      .team-name{font-size:12px}
+      .score-main{font-size:19px}
+      .score-section{min-width:50px}
+    }
   </style>
 </head>
 <body>
