@@ -55,7 +55,6 @@ const QUERY_LIVE_SERIES = `
     allSeries(
       filter: { titleId: 3 }
       first: 50
-      orderBy: SCHEDULED_START_TIME_ASC
     ) {
       edges {
         node {
@@ -111,7 +110,6 @@ const QUERY_PAST_SERIES = `
       filter: { titleIds: [3], status: [FINISHED] }
       first: 50
       page: $page
-      orderBy: { field: SCHEDULED_START_TIME, order: DESC }
     ) {
       totalCount
       edges {
