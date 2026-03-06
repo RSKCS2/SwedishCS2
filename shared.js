@@ -108,6 +108,17 @@ function extractRoundScore(game, t1Id, t2Id) {
     if (vals.length >= 2) { r1 = vals[0]; r2 = vals[1]; }
   }
 
+  // 4. game.rounds_score — used by /csgo/games/running
+  // Shape: [{team_id, score}] or [{team: {id}, score}]
+  if (r1 === 0 && r2 === 0 && game.rounds_score?.length) {
+    game.rounds_score.forEach(rs => {
+      const tid   = rs.team_id ?? rs.team?.id;
+      const score = rs.score ?? 0;
+      if (tid === t1Id)      r1 = Math.max(r1, score);
+      else if (tid === t2Id) r2 = Math.max(r2, score);
+    });
+  }
+
   return { r1, r2 };
 }
 

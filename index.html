@@ -165,13 +165,32 @@ async function fetchMatches() {
   try {
     await ensureSwedishData();
 
-    // Get all needed data in one call per endpoint — avoids fetching individual match IDs
-    const [runningList, upcomingList] = await Promise.all([
-      pandaFetch('/csgo/matches/running?per_page=50&include=opponents,games,picks_bans'),
+    // Fetch matches, upcoming, and live games (round scores) in parallel.
+    // /csgo/games/running is the only endpoint with real-time round scores.
+    // We merge games into matches by match_id — no individual match ID calls needed.
+    const [runningList, upcomingList, liveGames] = await Promise.all([
+      pandaFetch('/csgo/matches/running?per_page=50&include=opponents,picks_bans'),
       pandaFetch('/csgo/matches/upcoming?per_page=30&sort=begin_at&include=opponents'),
+      pandaFetch('/csgo/games/running?per_page=50'),
     ]);
 
-    const sweRunning     = runningList.filter(hasSweTeam);
+    // Build a map: match_id → [games] from the live games endpoint
+    const gamesByMatch = {};
+    liveGames.forEach(g => {
+      const mid = g.match_id;
+      if (!mid) return;
+      if (!gamesByMatch[mid]) gamesByMatch[mid] = [];
+      gamesByMatch[mid].push(g);
+    });
+
+    // Merge live game data into each running match
+    const sweRunning = runningList
+      .filter(hasSweTeam)
+      .map(m => ({
+        ...m,
+        games: gamesByMatch[m.id] || m.games || [],
+      }));
+
     const sweUpcomingRaw = upcomingList.filter(hasSweTeam);
 
     const scoreKey = buildScoreKey(sweRunning);
@@ -298,8 +317,9 @@ function renderCard(match, live, delay) {
 
   // Resolve map name for a game: prefer game.map.name, fall back to picks_bans by game position
   function resolveMapName(game, idx) {
+    // /csgo/games/running uses game.map_name (string); individual match uses game.map.name (object)
     if (game.map?.name) return game.map.name;
-    // picks_bans position is 1-based; try matching by index
+    if (game.map_name)  return game.map_name;
     const pb = pickedMaps[idx];
     return pb?.mapName || null;
   }
