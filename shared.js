@@ -60,18 +60,17 @@ const QUERY_LIVE_SERIES = `
         node {
           id
           startTimeScheduled
-          format { type }
           tournament { id name }
           teams {
             baseInfo { id name logoUrl }
             score
           }
+          format { bestOf }
           games {
             id
             sequenceNumber
             started
             finished
-            map { name }
           }
         }
       }
@@ -93,7 +92,6 @@ const QUERY_SERIES_STATE = `
         sequenceNumber
         started
         finished
-        map { name }
         teams {
           id
           side
@@ -116,18 +114,17 @@ const QUERY_PAST_SERIES = `
         node {
           id
           startTimeScheduled
-          format { type }
           tournament { id name }
           teams {
             baseInfo { id name logoUrl }
             score
           }
+          format { bestOf }
           games {
             id
             sequenceNumber
             started
             finished
-            map { name }
           }
         }
       }
@@ -155,7 +152,6 @@ function formatMapName(raw) {
 }
 
 function seriesFormat(series) {
-  const t = series.format?.type || '';
-  const m = t.match(/\d+/);
-  return m ? `BO${m[0]}` : 'BO?';
+  const n = series.format?.bestOf;
+  return n ? `BO${n}` : 'BO?';
 }
