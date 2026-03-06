@@ -17,17 +17,17 @@
     body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(240,208,0,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(240,208,0,.015) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
 
     /* ── HEADER ── */
-    header{position:sticky;top:0;z-index:100;background:rgba(10,12,15,.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:58px}
-    .logo{display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0}
+    header{position:sticky;top:0;z-index:100;background:rgba(10,12,15,.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 24px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;height:58px}
+    .logo{display:flex;align-items:center;gap:10px;text-decoration:none}
     .logo-flag{width:28px;height:20px;background:linear-gradient(180deg,#006AA7 33%,#FECC02 33%,#FECC02 66%,#006AA7 66%);border-radius:2px;position:relative;overflow:hidden}
     .logo-flag::after{content:'';position:absolute;top:0;left:22%;width:16%;height:100%;background:#FECC02}
     .logo-text{font-family:var(--display);font-size:22px;font-weight:800;letter-spacing:.08em;color:#fff;text-transform:uppercase}
     .logo-text span{color:var(--accent)}
-    nav{display:flex;gap:4px}
+    nav{display:flex;gap:4px;justify-content:center}
     nav a{font-family:var(--display);font-size:14px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-decoration:none;padding:6px 16px;border-radius:4px;border:1px solid transparent;transition:color .15s,background .15s,border-color .15s}
     nav a:hover{color:var(--text);background:var(--surface2)}
     nav a.active{color:var(--accent);background:rgba(240,208,0,.08);border-color:rgba(240,208,0,.25)}
-    .header-right{display:flex;align-items:center;gap:14px;flex-shrink:0}
+    .header-right{display:flex;justify-content:flex-end;align-items:center;gap:14px}
     .refresh-status{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
     .pulse-dot{width:7px;height:7px;border-radius:50%;background:var(--accent2);animation:pulse 2s infinite}
     @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
@@ -36,7 +36,6 @@
     main{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:28px 20px 80px}
     .page-title{font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:22px;display:flex;align-items:center;gap:10px}
     .page-title::after{content:'';flex:1;height:1px;background:var(--border)}
-
     .section-label{font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);margin:28px 0 12px;display:flex;align-items:center;gap:10px}
     .section-label::before{content:'';width:3px;height:14px;background:var(--accent2);border-radius:1px}
     .section-label.upcoming::before{background:var(--accent)}
@@ -55,11 +54,10 @@
     .badges{display:flex;gap:5px;margin-top:4px;flex-wrap:wrap}
     .live-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.3);color:var(--accent2);font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.12em;padding:2px 7px;border-radius:3px;text-transform:uppercase}
     .live-badge .dot{width:5px;height:5px;border-radius:50%;background:var(--accent2);animation:pulse 1.5s infinite}
-    .next-poll{font-family:var(--mono);font-size:11px;color:var(--muted)}
 
     /* ── TEAMS ── */
     .teams-section{flex:1;display:flex;align-items:center;justify-content:space-between;gap:10px}
-    .team-col{display:flex;flex-direction:column;gap:7px;flex:1;min-width:0}
+    .team-col{display:flex;flex-direction:column;gap:6px;flex:1;min-width:0}
     .team-col.right{align-items:flex-end}
     .team-row{display:flex;align-items:center;gap:10px}
     .team-row.right{flex-direction:row-reverse}
@@ -71,6 +69,7 @@
     .swe-pill{display:inline-flex;align-items:center;gap:4px;font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:3px;white-space:nowrap}
     .swe-pill.full{background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.3);color:var(--accent2)}
     .swe-pill.partial{background:rgba(240,208,0,.08);border:1px solid rgba(240,208,0,.25);color:var(--accent)}
+    .location-badge{font-family:var(--display);font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.04em}
 
     /* ── SCORE ── */
     .score-section{display:flex;flex-direction:column;align-items:center;gap:4px;padding:0 14px;min-width:90px}
@@ -103,7 +102,6 @@
     .state-card .icon{font-size:42px;margin-bottom:16px;opacity:.4}
     .state-card h3{font-family:var(--display);font-size:20px;font-weight:700;letter-spacing:.06em;color:var(--text);margin-bottom:8px}
     .state-card p{font-size:15px;line-height:1.6;max-width:420px;margin:0 auto}
-    .state-card a{color:var(--accent2)}
     .spinner{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
     @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -111,7 +109,6 @@
     .status-bar{position:fixed;bottom:0;left:0;right:0;z-index:10;background:var(--surface);border-top:1px solid var(--border);padding:8px 24px;display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:12px;color:var(--muted)}
     .poll-progress{flex:1;height:2px;background:var(--border);border-radius:1px;margin:0 16px;overflow:hidden}
     .poll-fill{height:100%;background:var(--accent);border-radius:1px;transition:width 1s linear}
-    .poll-mode{font-size:11px}
     .poll-mode.fast{color:var(--accent2)}
     .poll-mode.slow{color:var(--muted)}
 
@@ -142,30 +139,24 @@
   <div id="content"><div class="state-card"><div class="spinner"></div><p>Fetching matches…</p></div></div>
 </main>
 
-<div class="status-bar" id="status-bar">
+<div class="status-bar">
   <span class="poll-mode" id="poll-mode">—</span>
   <div class="poll-progress"><div class="poll-fill" id="poll-fill" style="width:100%"></div></div>
   <span id="poll-countdown">—</span>
 </div>
 
-<!-- Load shared utilities (Worker URL, fetch helper, Swedish player data) -->
 <script src="shared.js"></script>
 <script>
-// ── SMART POLL INTERVALS ───────────────────────────────────────────────────
-const INTERVAL_LIVE     = 25;    // seconds — active live match
-const INTERVAL_UPCOMING = 300;   // 5 min   — only upcoming
-const INTERVAL_IDLE     = 900;   // 15 min  — no matches
+const INTERVAL_LIVE     = 25;
+const INTERVAL_UPCOMING = 300;
+const INTERVAL_IDLE     = 900;
 
-let pollTimer    = null;
-let tickTimer    = null;
-let pollInterval = INTERVAL_UPCOMING;
-let countdown    = pollInterval;
-// Track last-known scores to detect changes without full re-render flicker
+let pollTimer = null, tickTimer = null;
+let pollInterval = INTERVAL_UPCOMING, countdown = INTERVAL_UPCOMING;
 let lastScoreKey = '';
 
 window.addEventListener('DOMContentLoaded', () => { fetchMatches(); });
 
-// ── FETCH ──────────────────────────────────────────────────────────────────
 async function fetchMatches() {
   try {
     await ensureSwedishData();
@@ -178,7 +169,6 @@ async function fetchMatches() {
     const sweRunning  = running.filter(hasSweTeam);
     const sweUpcoming = upcoming.filter(hasSweTeam);
 
-    // Build a lightweight score fingerprint — only re-render if something changed
     const scoreKey = buildScoreKey(sweRunning);
     if (scoreKey !== lastScoreKey) {
       lastScoreKey = scoreKey;
@@ -188,14 +178,9 @@ async function fetchMatches() {
     document.getElementById('last-update').textContent =
       'Updated ' + new Date().toLocaleTimeString('sv-SE');
 
-    // Decide next poll interval based on match state
-    const newInterval = sweRunning.length > 0
+    schedulePoll(sweRunning.length > 0
       ? INTERVAL_LIVE
-      : sweUpcoming.length > 0
-        ? INTERVAL_UPCOMING
-        : INTERVAL_IDLE;
-
-    schedulePoll(newInterval);
+      : sweUpcoming.length > 0 ? INTERVAL_UPCOMING : INTERVAL_IDLE);
 
   } catch (err) {
     document.getElementById('content').innerHTML = `
@@ -203,83 +188,57 @@ async function fetchMatches() {
         <div class="icon">⚠️</div>
         <h3>Connection Error</h3>
         <p>${err.status === undefined
-          ? 'Could not reach the server. Is your Cloudflare Worker deployed? Check the URL in shared.js.'
-          : `API error ${err.status}. Check your PandaScore token in the Worker settings.`
-        }</p>
+          ? 'Could not reach the Worker. Check the URL in shared.js.'
+          : `API error ${err.status}.`}</p>
       </div>`;
     schedulePoll(INTERVAL_IDLE);
   }
 }
 
-// Score fingerprint: round scores of all running matches concatenated
-function buildScoreKey(runningMatches) {
-  return runningMatches.map(m => {
+function buildScoreKey(matches) {
+  return matches.map(m => {
+    const t1 = m.opponents?.[0]?.opponent;
+    const t2 = m.opponents?.[1]?.opponent;
     const { t1Maps, t2Maps } = extractMapScore(m);
-    const gameScores = (m.games||[])
+    const gameStr = (m.games||[])
       .filter(g => g.status !== 'not_started')
       .map(g => {
-        let r1=0, r2=0;
-        const t1 = m.opponents?.[0]?.opponent;
-        const t2 = m.opponents?.[1]?.opponent;
-        (g.results||[]).forEach(r => {
-          if (r.team_id===t1?.id) r1=r.score;
-          else if (r.team_id===t2?.id) r2=r.score;
-        });
+        const { r1, r2 } = extractRoundScore(g, t1?.id, t2?.id);
         return `${r1}-${r2}`;
       }).join(',');
-    return `${m.id}:${t1Maps}-${t2Maps}[${gameScores}]`;
+    return `${m.id}:${t1Maps}-${t2Maps}[${gameStr}]`;
   }).join('|');
 }
 
-// ── SMART POLL SCHEDULER ───────────────────────────────────────────────────
 function schedulePoll(interval) {
-  clearTimeout(pollTimer);
-  clearInterval(tickTimer);
-
-  pollInterval = interval;
-  countdown    = interval;
+  clearTimeout(pollTimer); clearInterval(tickTimer);
+  pollInterval = interval; countdown = interval;
   updatePollUI();
-
-  pollTimer = setTimeout(() => { fetchMatches(); }, interval * 1000);
-
-  tickTimer = setInterval(() => {
-    countdown = Math.max(0, countdown - 1);
-    updatePollUI();
-  }, 1000);
+  pollTimer = setTimeout(() => fetchMatches(), interval * 1000);
+  tickTimer = setInterval(() => { countdown = Math.max(0, countdown - 1); updatePollUI(); }, 1000);
 }
 
 function updatePollUI() {
-  const fill = document.getElementById('poll-fill');
-  const cd   = document.getElementById('poll-countdown');
-  const mode = document.getElementById('poll-mode');
-
-  fill.style.width = (countdown / pollInterval * 100) + '%';
-
+  document.getElementById('poll-fill').style.width = (countdown / pollInterval * 100) + '%';
   if (pollInterval === INTERVAL_LIVE) {
-    cd.textContent   = countdown + 's';
-    mode.textContent = '● LIVE — updating every 25s';
-    mode.className   = 'poll-mode fast';
+    document.getElementById('poll-countdown').textContent = countdown + 's';
+    document.getElementById('poll-mode').textContent = '● LIVE — updating every 25s';
+    document.getElementById('poll-mode').className = 'poll-mode fast';
   } else if (pollInterval === INTERVAL_UPCOMING) {
-    cd.textContent   = Math.ceil(countdown/60) + 'min';
-    mode.textContent = 'Next match upcoming — checking every 5min';
-    mode.className   = 'poll-mode slow';
+    document.getElementById('poll-countdown').textContent = Math.ceil(countdown/60) + 'min';
+    document.getElementById('poll-mode').textContent = 'Upcoming — checking every 5min';
+    document.getElementById('poll-mode').className = 'poll-mode slow';
   } else {
-    cd.textContent   = Math.ceil(countdown/60) + 'min';
-    mode.textContent = 'No matches — checking every 15min';
-    mode.className   = 'poll-mode slow';
+    document.getElementById('poll-countdown').textContent = Math.ceil(countdown/60) + 'min';
+    document.getElementById('poll-mode').textContent = 'No matches — checking every 15min';
+    document.getElementById('poll-mode').className = 'poll-mode slow';
   }
 }
 
-// ── RENDER ─────────────────────────────────────────────────────────────────
 function renderMatches(running, upcoming) {
   let html = '';
-
   if (!running.length && !upcoming.length) {
-    html = `<div class="state-card">
-      <div class="icon">📡</div>
-      <h3>No Swedish Matches Right Now</h3>
-      <p>No live or upcoming CS2 matches with Swedish players at the moment.</p>
-    </div>`;
+    html = `<div class="state-card"><div class="icon">📡</div><h3>No Swedish Matches Right Now</h3><p>No live or upcoming CS2 matches with Swedish players at the moment.</p></div>`;
   } else {
     if (running.length) {
       html += `<div class="section-label">Live Now — ${running.length} match${running.length !== 1 ? 'es' : ''}</div>`;
@@ -290,7 +249,6 @@ function renderMatches(running, upcoming) {
       upcoming.forEach((m, i) => { html += renderCard(m, false, i * 40); });
     }
   }
-
   document.getElementById('content').innerHTML = html;
 }
 
@@ -304,15 +262,15 @@ function renderCard(match, live, delay) {
   const { t1Maps, t2Maps } = extractMapScore(match);
   const t1Win  = match.winner?.id === t1?.id;
   const t2Win  = match.winner?.id === t2?.id;
-  const curMap = games.find(g => g.status === 'running')?.map?.name || '';
+
+  const curMap     = games.find(g => g.status === 'running')?.map?.name || '';
   const tournament = match.tournament?.name || match.league?.name || 'CS2';
   const bo         = match.number_of_games ? `BO${match.number_of_games}` : 'BO?';
-
-  const timeStr = live
+  const timeStr    = live
     ? (curMap ? curMap.replace('de_','').replace('cs_','').toUpperCase() : 'LIVE')
     : new Date(match.begin_at).toLocaleString('sv-SE', { weekday:'short', hour:'2-digit', minute:'2-digit' }).toUpperCase();
 
-  // Map breakdown strip (live only)
+  // Map breakdown strip
   let mapsHtml = '';
   const played = games.filter(g => g.status !== 'not_started');
   if (live && played.length) {
@@ -320,12 +278,8 @@ function renderCard(match, live, delay) {
     played.forEach(g => {
       const mn  = (g.map?.name||'?').replace('de_','').replace('cs_','').toUpperCase();
       const run = g.status === 'running';
-      let r1=0, r2=0;
-      (g.results||[]).forEach(r => {
-        if (r.team_id===t1?.id) r1=r.score;
-        else if (r.team_id===t2?.id) r2=r.score;
-      });
-      const tot = (r1+r2)||1;
+      const { r1, r2 } = extractRoundScore(g, t1?.id, t2?.id);
+      const tot = (r1 + r2) || 1;
       mapsHtml += `<div class="map-item">
         <div class="map-name-row">
           <span class="map-name">${mn}</span>
@@ -359,7 +313,10 @@ function renderCard(match, live, delay) {
             ${teamLogo(t1)}
             <span class="team-name${t1Win?' winner':''}${t1swe?' swe-hl':''}">${t1?.name||'TBD'}</span>
           </div>
-          ${swePill(t1swe)}
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            ${swePill(t1swe)}
+            ${!t1swe ? teamLocationBadge(t1) : ''}
+          </div>
         </div>
         <div class="score-section">
           <div class="score-main">
@@ -374,7 +331,10 @@ function renderCard(match, live, delay) {
             ${teamLogo(t2)}
             <span class="team-name${t2Win?' winner':''}${t2swe?' swe-hl':''}">${t2?.name||'TBD'}</span>
           </div>
-          ${swePill(t2swe, 'right')}
+          <div style="display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap">
+            ${!t2swe ? teamLocationBadge(t2) : ''}
+            ${swePill(t2swe, 'right')}
+          </div>
         </div>
       </div>
     </div>

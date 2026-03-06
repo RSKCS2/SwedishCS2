@@ -17,16 +17,19 @@
     body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(240,208,0,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(240,208,0,.015) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
 
     /* ── HEADER ── */
-    header{position:sticky;top:0;z-index:100;background:rgba(10,12,15,.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:58px}
-    .logo{display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0}
+    header{position:sticky;top:0;z-index:100;background:rgba(10,12,15,.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 24px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;height:58px}
+    .logo{display:flex;align-items:center;gap:10px;text-decoration:none}
     .logo-flag{width:28px;height:20px;background:linear-gradient(180deg,#006AA7 33%,#FECC02 33%,#FECC02 66%,#006AA7 66%);border-radius:2px;position:relative;overflow:hidden}
     .logo-flag::after{content:'';position:absolute;top:0;left:22%;width:16%;height:100%;background:#FECC02}
     .logo-text{font-family:var(--display);font-size:22px;font-weight:800;letter-spacing:.08em;color:#fff;text-transform:uppercase}
     .logo-text span{color:var(--accent)}
-    nav{display:flex;gap:4px}
+    /* grid-column:2 → always in the exact center */
+    nav{display:flex;gap:4px;justify-content:center}
     nav a{font-family:var(--display);font-size:14px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-decoration:none;padding:6px 16px;border-radius:4px;border:1px solid transparent;transition:color .15s,background .15s,border-color .15s}
     nav a:hover{color:var(--text);background:var(--surface2)}
     nav a.active{color:var(--accent);background:rgba(240,208,0,.08);border-color:rgba(240,208,0,.25)}
+    /* empty right column keeps nav truly centered */
+    .header-spacer{display:flex;justify-content:flex-end}
 
     /* ── MAIN ── */
     main{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:28px 20px 60px}
@@ -41,14 +44,25 @@
     #search-input:focus{border-color:var(--accent)}
     #search-input::placeholder{color:var(--muted)}
 
-    /* ── STATS BAR ── */
-    .stats-bar{display:flex;gap:1px;margin-bottom:24px;border-radius:6px;overflow:hidden;border:1px solid var(--border)}
+    /* ── STATS PANELS ── */
+    .stats-section{margin-bottom:24px;display:flex;flex-direction:column;gap:10px}
+
+    /* Period tabs */
+    .period-tabs{display:flex;gap:4px}
+    .period-tab{font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:5px 14px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:all .15s}
+    .period-tab:hover{color:var(--text);border-color:var(--text)}
+    .period-tab.active{color:var(--accent);background:rgba(240,208,0,.08);border-color:rgba(240,208,0,.25)}
+
+    /* Stats grid */
+    .stats-bar{display:flex;gap:1px;border-radius:6px;overflow:hidden;border:1px solid var(--border)}
     .stat-item{flex:1;padding:14px 16px;background:var(--surface);text-align:center}
     .stat-value{font-family:var(--mono);font-size:26px;color:#fff;line-height:1;margin-bottom:4px}
     .stat-value.green{color:var(--accent2)}
     .stat-value.yellow{color:var(--accent)}
     .stat-value.red{color:var(--red)}
     .stat-label{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)}
+    /* period label inside stat bar */
+    .stats-period-label{font-family:var(--display);font-size:10px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);text-align:right;padding:4px 2px 0}
 
     /* ── RESULT CARD ── */
     .result-card{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:6px;margin-bottom:8px;overflow:hidden;transition:border-color .2s;animation:cardIn .25s ease both}
@@ -72,6 +86,7 @@
     .swe-pill{display:inline-flex;align-items:center;gap:4px;font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border-radius:3px;white-space:nowrap}
     .swe-pill.full{background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.3);color:var(--accent2)}
     .swe-pill.partial{background:rgba(240,208,0,.08);border:1px solid rgba(240,208,0,.25);color:var(--accent)}
+    .location-badge{font-family:var(--display);font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.04em}
 
     .result-score{display:flex;flex-direction:column;align-items:center;padding:0 10px;min-width:72px}
     .rs-main{font-family:var(--mono);font-size:22px;line-height:1}
@@ -96,7 +111,6 @@
     .date-group{font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);padding:20px 0 10px;display:flex;align-items:center;gap:10px}
     .date-group::after{content:'';flex:1;height:1px;background:var(--border)}
 
-    /* States */
     .state-card{text-align:center;padding:60px 20px;color:var(--muted)}
     .state-card .icon{font-size:42px;margin-bottom:16px;opacity:.4}
     .state-card h3{font-family:var(--display);font-size:20px;font-weight:700;letter-spacing:.06em;color:var(--text);margin-bottom:8px}
@@ -106,7 +120,7 @@
     @keyframes spin{to{transform:rotate(360deg)}}
     .pagination-info{font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;padding:14px 0}
 
-    @media(max-width:600px){.result-tournament{display:none}.rt-name{font-size:14px}.rs-main{font-size:18px}}
+    @media(max-width:600px){.result-tournament{display:none}.rt-name{font-size:14px}.rs-main{font-size:18px}.stats-bar{flex-wrap:wrap}.stat-item{min-width:48%}}
   </style>
 </head>
 <body>
@@ -120,6 +134,7 @@
     <a href="index.html">Live</a>
     <a href="history.html" class="active">History</a>
   </nav>
+  <div class="header-spacer"></div>
 </header>
 
 <main>
@@ -127,11 +142,18 @@
 
   <div class="controls">
     <div class="search-wrap">
-      <input id="search-input" type="text" autocomplete="off" placeholder="Search team or tournament…" oninput="onSearch(this.value)" />
+      <input id="search-input" type="text" autocomplete="off"
+             placeholder="Search team or tournament…" oninput="onSearch(this.value)" />
     </div>
   </div>
 
-  <div id="stats-bar" style="display:none">
+  <div id="stats-section" class="stats-section" style="display:none">
+    <div class="period-tabs">
+      <button class="period-tab active" onclick="setPeriod('all')">All time</button>
+      <button class="period-tab" onclick="setPeriod('month')">This month</button>
+      <button class="period-tab" onclick="setPeriod('week')">This week</button>
+      <button class="period-tab" onclick="setPeriod('day')">Today</button>
+    </div>
     <div class="stats-bar">
       <div class="stat-item"><div class="stat-value" id="stat-total">—</div><div class="stat-label">Matches</div></div>
       <div class="stat-item"><div class="stat-value green" id="stat-wins">—</div><div class="stat-label">SWE Wins</div></div>
@@ -147,40 +169,58 @@
 
 <script src="shared.js"></script>
 <script>
-let allMatches   = [];
-let searchQuery  = '';
+let allMatches  = [];
+let searchQuery = '';
+let activePeriod = 'all';
 
 window.addEventListener('DOMContentLoaded', fetchHistory);
 
 async function fetchHistory() {
   try {
     await ensureSwedishData();
-
     const data = await pandaFetch(
       '/csgo/matches/past?per_page=100&sort=-end_at&include=games,opponents'
     );
-
-    // Only keep matches with at least one Swedish team
     allMatches = data.filter(hasSweTeam);
-
+    document.getElementById('stats-section').style.display = 'flex';
     renderResults();
-    document.getElementById('stats-bar').style.display = 'block';
   } catch (err) {
     document.getElementById('content').innerHTML = `
       <div class="state-card">
-        <div class="icon">⚠️</div>
-        <h3>Connection Error</h3>
+        <div class="icon">⚠️</div><h3>Connection Error</h3>
         <p>${err.status === undefined
-          ? 'Could not reach the server. Is your Cloudflare Worker deployed? Check the URL in shared.js.'
-          : `API error ${err.status}.`
-        }</p>
+          ? 'Could not reach the Worker. Check the URL in shared.js.'
+          : `API error ${err.status}.`}</p>
       </div>`;
   }
 }
 
-function onSearch(val) {
-  searchQuery = val.toLowerCase().trim();
-  renderResults();
+function onSearch(val) { searchQuery = val.toLowerCase().trim(); renderResults(); }
+
+function setPeriod(p) {
+  activePeriod = p;
+  document.querySelectorAll('.period-tab').forEach(b => {
+    b.classList.toggle('active', b.textContent.toLowerCase().replace(' ','') === {
+      all:'alltime', month:'thismonth', week:'thisweek', day:'today'
+    }[p]);
+  });
+  updateStats();
+}
+
+// Return start-of-period Date for filtering
+function periodStart(period) {
+  const now = new Date();
+  if (period === 'day') {
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  } else if (period === 'week') {
+    const d = new Date(now);
+    d.setDate(d.getDate() - d.getDay()); // Sunday
+    d.setHours(0,0,0,0);
+    return d;
+  } else if (period === 'month') {
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  }
+  return null; // all time
 }
 
 function matchesSearch(match) {
@@ -191,37 +231,48 @@ function matchesSearch(match) {
   return t1.includes(searchQuery) || t2.includes(searchQuery) || tour.includes(searchQuery);
 }
 
-function renderResults() {
-  const filtered = allMatches.filter(matchesSearch);
+function matchInPeriod(match, start) {
+  if (!start) return true;
+  const d = new Date(match.end_at || match.begin_at);
+  return d >= start;
+}
 
-  // Stats (only count matches where a Swedish team is a direct participant)
+function calcStats(matches) {
   let wins = 0, losses = 0;
-  filtered.forEach(m => {
+  matches.forEach(m => {
     if (!m.winner) return;
-    const t1    = m.opponents?.[0]?.opponent;
-    const t2    = m.opponents?.[1]?.opponent;
-    const sweT  = sweInfo(t1) ? t1 : sweInfo(t2) ? t2 : null;
+    const t1   = m.opponents?.[0]?.opponent;
+    const t2   = m.opponents?.[1]?.opponent;
+    const sweT = sweInfo(t1) ? t1 : sweInfo(t2) ? t2 : null;
     if (!sweT) return;
     if (m.winner.id === sweT.id) wins++; else losses++;
   });
+  return { total: matches.length, wins, losses };
+}
 
-  document.getElementById('stat-total').textContent   = filtered.length;
+function updateStats() {
+  const start    = periodStart(activePeriod);
+  const filtered = allMatches.filter(m => matchesSearch(m) && matchInPeriod(m, start));
+  const { total, wins, losses } = calcStats(filtered);
+  const wr = (wins + losses) > 0 ? Math.round(wins/(wins+losses)*100)+'%' : '—';
+  document.getElementById('stat-total').textContent   = total;
   document.getElementById('stat-wins').textContent    = wins;
   document.getElementById('stat-losses').textContent  = losses;
-  const tot = wins + losses;
-  document.getElementById('stat-winrate').textContent = tot > 0 ? Math.round(wins/tot*100)+'%' : '—';
+  document.getElementById('stat-winrate').textContent = wr;
+}
+
+function renderResults() {
+  const filtered = allMatches.filter(matchesSearch);
+  updateStats();
 
   if (!filtered.length) {
     document.getElementById('content').innerHTML = `
-      <div class="state-card">
-        <div class="icon">📂</div>
-        <h3>No Results Found</h3>
-        <p>${searchQuery ? `No matches for "${searchQuery}".` : 'No Swedish matches in the last 100 results.'}</p>
-      </div>`;
+      <div class="state-card"><div class="icon">📂</div><h3>No Results Found</h3>
+      <p>${searchQuery ? `No matches for "${searchQuery}".` : 'No Swedish matches in the last 100 results.'}</p></div>`;
     return;
   }
 
-  // Group by calendar date
+  // Group by date
   const groups = {};
   filtered.forEach(m => {
     const d   = m.end_at ? new Date(m.end_at) : new Date(m.begin_at);
@@ -255,26 +306,17 @@ function renderResultCard(match, delay) {
   const bo         = match.number_of_games ? `BO${match.number_of_games}` : '';
   const cardId     = 'rc-' + match.id;
 
-  // Logo helper using shared.js teamLogo but with rt-logo class
   const logo = t => t?.image_url
     ? `<img class="rt-logo" src="${t.image_url}" alt="${t.name||''}" onerror="this.style.display='none'" />`
     : `<div class="rt-logo-ph">${(t?.name||'?')[0].toUpperCase()}</div>`;
 
-  // Map breakdown (expandable)
-  const games = (match.games||[]).filter(g => g.status !== 'not_started' && g.status !== 'canceled');
-  let mapsHtml = '';
+  // Map scores
+  const games    = (match.games||[]).filter(g => g.status !== 'not_started' && g.status !== 'canceled');
+  let mapsHtml   = '';
   if (games.length) {
-    const mapItems = games.map(g => {
+    const items = games.map(g => {
       const mn = (g.map?.name||'?').replace('de_','').replace('cs_','').toUpperCase();
-      let r1=0, r2=0;
-      (g.results||[]).forEach(r => {
-        if (r.team_id===t1?.id) r1=r.score;
-        else if (r.team_id===t2?.id) r2=r.score;
-      });
-      // fallback to winner flag if results missing
-      if (r1===0 && r2===0 && g.winner) {
-        if (g.winner.id===t1?.id) r1=1; else r2=1;
-      }
+      const { r1, r2 } = extractRoundScore(g, t1?.id, t2?.id);
       return `<div class="map-pill">
         <div class="mp-name">${mn}</div>
         <div class="mp-score">
@@ -284,10 +326,9 @@ function renderResultCard(match, delay) {
         </div>
       </div>`;
     }).join('');
-
     mapsHtml = `
       <div class="result-card__maps" id="${cardId}-maps">
-        <div class="maps-grid">${mapItems}</div>
+        <div class="maps-grid">${items}</div>
       </div>
       <button class="expand-btn" onclick="toggleMaps('${cardId}')">
         <span>MAP SCORES (${games.length})</span>
@@ -306,7 +347,10 @@ function renderResultCard(match, delay) {
       <div class="result-teams">
         <div class="rt">
           <div class="rt-namerow">${logo(t1)}<span class="${t1Class}">${t1?.name||'TBD'}</span></div>
-          ${swePill(t1swe)}
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            ${swePill(t1swe)}
+            ${!t1swe ? teamLocationBadge(t1) : ''}
+          </div>
         </div>
         <div class="result-score">
           <div class="rs-main">
@@ -318,7 +362,10 @@ function renderResultCard(match, delay) {
         </div>
         <div class="rt right">
           <div class="rt-namerow">${logo(t2)}<span class="${t2Class}">${t2?.name||'TBD'}</span></div>
-          ${swePill(t2swe,'right')}
+          <div style="display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap">
+            ${!t2swe ? teamLocationBadge(t2) : ''}
+            ${swePill(t2swe,'right')}
+          </div>
         </div>
       </div>
     </div>
