@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Swedish flag background -->
+  <rect width="32" height="32" rx="4" fill="#006AA7"/>
+  <!-- Horizontal yellow bar -->
+  <rect y="11" width="32" height="10" fill="#FECC02"/>
+  <!-- Vertical yellow bar -->
+  <rect x="9" width="10" height="32" fill="#FECC02"/>
+  <!-- CS2-style crosshair overlay in top-right quadrant -->
+  <g opacity="0.92">
+    <!-- crosshair circle -->
+    <circle cx="23" cy="8" r="4.5" fill="none" stroke="#0a0c0f" stroke-width="1.4"/>
+    <!-- crosshair lines -->
+    <line x1="23" y1="3" x2="23" y2="5.5" stroke="#0a0c0f" stroke-width="1.4" stroke-linecap="round"/>
+    <line x1="23" y1="10.5" x2="23" y2="13" stroke="#0a0c0f" stroke-width="1.4" stroke-linecap="round"/>
+    <line x1="18" y1="8" x2="20.5" y2="8" stroke="#0a0c0f" stroke-width="1.4" stroke-linecap="round"/>
+    <line x1="25.5" y1="8" x2="28" y2="8" stroke="#0a0c0f" stroke-width="1.4" stroke-linecap="round"/>
+    <!-- center dot -->
+    <circle cx="23" cy="8" r="1.1" fill="#0a0c0f"/>
+  </g>
+</svg>

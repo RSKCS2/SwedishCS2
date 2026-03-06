@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SWE CS2 · Direktresultat</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500&display=swap" rel="stylesheet" />
   <style>
@@ -51,7 +52,6 @@
     .match-meta{display:flex;flex-direction:column;gap:4px;min-width:140px}
     .match-tournament{font-family:var(--display);font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
     .match-time{font-family:var(--mono);font-size:12px;color:var(--muted)}
-    .badges{display:flex;gap:5px;margin-top:4px;flex-wrap:wrap}
     .live-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.3);color:var(--accent2);font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.12em;padding:2px 7px;border-radius:3px;text-transform:uppercase}
     .live-badge .dot{width:5px;height:5px;border-radius:50%;background:var(--accent2);animation:pulse 1.5s infinite}
 
@@ -390,7 +390,6 @@ function renderCard(match, isLive, delay) {
       <div class="match-meta">
         <span class="match-tournament" title="${tournament}">${tournament}</span>
         <span class="match-time">${timeStr}</span>
-        <div class="badges">${isLive ? '<span class="live-badge"><span class="dot"></span>LIVE</span>' : ''}</div>
       </div>
       <div class="teams-section">
         <div class="team-col">

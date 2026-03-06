@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SWE CS2 · Resultathistorik</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500&display=swap" rel="stylesheet" />
   <style>
@@ -88,20 +89,6 @@
     .rs-label{font-family:var(--display);font-size:10px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-top:3px}
 
     /* Map expand */
-    .result-card__maps{display:none;border-top:1px solid var(--border);background:rgba(0,0,0,.15)}
-    .result-card__maps.open{display:block}
-    .maps-grid{display:flex;flex-wrap:wrap}
-    .map-pill{flex:1;min-width:90px;padding:10px 14px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:5px}
-    .map-pill:last-child{border-right:none}
-    .mp-name{font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:#fff;margin-bottom:2px}
-    .mp-picker{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .mp-picker .lbl{opacity:.7;margin-right:3px}
-    .mp-picker .team{color:var(--accent)}
-    .mp-picker .decider{font-style:italic}
-    .mp-score{font-family:var(--mono);font-size:20px;display:flex;gap:4px;align-items:baseline}
-    .mp-score .sep{font-size:15px;color:var(--muted)}
-    .mp-score .w{color:var(--accent2)}
-    .mp-score .l{color:var(--muted)}
 
 
     .date-group{font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);padding:20px 0 10px;display:flex;align-items:center;gap:10px}
@@ -222,7 +209,7 @@ async function fetchAndMerge() {
 
     while (true) {
       const batch = await pandaFetch(
-        `/csgo/matches/past?per_page=50&sort=-end_at&page=${page}&include=games,opponents,results&range[end_at]=${yearStart},${today}`
+        `/csgo/matches/past?per_page=50&sort=-end_at&page=${page}&include=opponents,results&range[end_at]=${yearStart},${today}`
       );
       if (!batch.length) break;
 
@@ -358,23 +345,7 @@ function renderResultCard(match, delay) {
   const logo = t => t?.image_url
     ? `<img class="rt-logo" src="${t.image_url}" alt="${t.name || ''}" onerror="this.style.display='none'" />`
     : `<div class="rt-logo-ph">${(t?.name || '?')[0].toUpperCase()}</div>`;
-
-  const games = (match.games || []).filter(g => g.status !== 'not_started' && g.status !== 'canceled');
-
-  // Simple always-visible map strip
   let mapsHtml = '';
-  if (games.length) {
-    const items = games.map(g => {
-      const mn = formatMapName(g.map?.name);
-      const { r1, r2 } = extractRoundScore(g, t1?.id, t2?.id);
-      return `<div class="map-pill">
-        <div class="mp-name">${mn || '?'}</div>
-        <div class="mp-score">
-          <span class="${r1 > r2 ? 'w' : 'l'}">${r1}</span><span class="sep">:</span><span class="${r2 > r1 ? 'w' : 'l'}">${r2}</span>
-        </div></div>`;
-    }).join('');
-    mapsHtml = `<div class="result-card__maps open"><div class="maps-grid">${items}</div></div>`;
-  }
 
   const t1Class = ['rt-name', t1swe ? 'swe-hl' : (t1Win ? 'winner' : t2Win ? 'loser' : '')].filter(Boolean).join(' ');
   const t2Class = ['rt-name', t2swe ? 'swe-hl' : (t2Win ? 'winner' : t1Win ? 'loser' : '')].filter(Boolean).join(' ');
@@ -407,7 +378,6 @@ function renderResultCard(match, delay) {
         </div>
       </div>
     </div>
-    ${mapsHtml}
   </div>`;
 }
 
