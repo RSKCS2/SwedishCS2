@@ -42,7 +42,7 @@ const QUERY_LIVE_SERIES = `
     allSeries(
       filter: { startTimeScheduled: { gte: $gte, lte: $lte } }
       orderBy: StartTimeScheduled
-      first: 100
+      first: 50
     ) {
       edges {
         node {
@@ -90,7 +90,7 @@ const QUERY_PAST_SERIES = `
     allSeries(
       filter: { startTimeScheduled: { gte: $gte, lte: $lte } }
       orderBy: StartTimeScheduled
-      first: 100
+      first: 50
     ) {
       totalCount
       edges {
