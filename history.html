@@ -218,9 +218,7 @@ async function fetchAndMerge() {
     const countBefore = allMatches.length;
     const storedIds  = new Set(allMatches.map(m => m.id));
 
-    const sweTeamIds = Object.entries(_sweTeamData)
-      .filter(([, d]) => d.count >= 3)
-      .map(([id]) => id);
+    const sweTeamIds = Object.keys(_sweTeamData);
 
     const byId = {};
     allMatches.forEach(m => { byId[m.id] = m; });
