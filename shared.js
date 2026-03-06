@@ -55,7 +55,6 @@ const QUERY_LIVE_SERIES = `
     allSeries(
       filter: {
         titleId: 3,
-        status: [STARTED, UPCOMING],
         scheduledBefore: $to
       }
       first: 50
