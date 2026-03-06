@@ -86,6 +86,10 @@
     .map-name{font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
     .map-status{font-family:var(--mono);font-size:11px;color:var(--muted)}
     .map-status.live{color:var(--accent2)}
+    .map-status.done{color:var(--muted)}
+    .map-status.pending{color:var(--muted);opacity:.5}
+    .map-pending{opacity:.55}
+    .map-picker{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.06em;margin-bottom:2px;display:block}
     .map-score-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px}
     .map-score{font-family:var(--mono);font-size:22px;line-height:1}
     .map-score.left{text-align:left}
@@ -162,8 +166,8 @@ async function fetchMatches() {
     await ensureSwedishData();
 
     const [running, upcoming] = await Promise.all([
-      pandaFetch('/csgo/matches/running?per_page=50&include=games,opponents'),
-      pandaFetch('/csgo/matches/upcoming?per_page=30&sort=begin_at&include=opponents'),
+      pandaFetch('/csgo/matches/running?per_page=50&include=games,opponents,picks_bans'),
+      pandaFetch('/csgo/matches/upcoming?per_page=30&sort=begin_at&include=opponents,picks_bans'),
     ]);
 
     const sweRunning  = running.filter(hasSweTeam);
@@ -263,37 +267,86 @@ function renderCard(match, live, delay) {
   const t1Win  = match.winner?.id === t1?.id;
   const t2Win  = match.winner?.id === t2?.id;
 
-  const curMap     = games.find(g => g.status === 'running')?.map?.name || '';
   const tournament = match.tournament?.name || match.league?.name || 'CS2';
   const bo         = match.number_of_games ? `BO${match.number_of_games}` : 'BO?';
-  const timeStr    = live
-    ? (curMap ? curMap.replace('de_','').replace('cs_','').toUpperCase() : 'LIVE')
+
+  // Build a map-name lookup from picks_bans: position → { mapName, pickedBy }
+  // PandaScore picks_bans: [{ type:'pick'|'ban', map:{name}, team:{id,name}, position }]
+  const picksByPos = {};
+  (match.picks_bans || []).forEach(pb => {
+    if (pb.type === 'pick' && pb.map?.name) {
+      picksByPos[pb.position] = {
+        mapName:  pb.map.name,
+        pickedBy: pb.team?.name || null,
+        teamId:   pb.team?.id   || null,
+      };
+    }
+  });
+
+  // Also build a flat list of picked maps in order for display
+  const pickedMaps = Object.values(picksByPos);
+
+  // Resolve map name for a game: prefer game.map.name, fall back to picks_bans by game position
+  function resolveMapName(game, idx) {
+    if (game.map?.name) return game.map.name;
+    // picks_bans position is 1-based; try matching by index
+    const pb = pickedMaps[idx];
+    return pb?.mapName || null;
+  }
+
+  function formatMap(raw) {
+    if (!raw) return null;
+    return raw.replace(/^de_|^cs_/i, '').toUpperCase();
+  }
+
+  const curMap = games.find(g => g.status === 'running');
+  const curMapName = curMap ? formatMap(resolveMapName(curMap, games.indexOf(curMap))) : null;
+  const timeStr = live
+    ? (curMapName ? curMapName : 'LIVE')
     : new Date(match.begin_at).toLocaleString('sv-SE', { weekday:'short', hour:'2-digit', minute:'2-digit' }).toUpperCase();
 
-  // Map breakdown strip
+  // Map breakdown strip — show ALL games (including not_started) so you see the full series
   let mapsHtml = '';
-  const played = games.filter(g => g.status !== 'not_started');
-  if (live && played.length) {
+  if (live && games.length) {
     mapsHtml = `<div class="match-card__maps">`;
-    played.forEach(g => {
-      const mn  = (g.map?.name||'?').replace('de_','').replace('cs_','').toUpperCase();
-      const run = g.status === 'running';
-      const { r1, r2 } = extractRoundScore(g, t1?.id, t2?.id);
-      const tot = (r1 + r2) || 1;
-      mapsHtml += `<div class="map-item">
+    games.forEach((g, idx) => {
+      const rawName  = resolveMapName(g, idx);
+      const mn       = formatMap(rawName) || 'TBD';
+      const isLive   = g.status === 'running';
+      const isDone   = g.status === 'finished' || g.status === 'over';
+      const isPending = !isLive && !isDone;
+
+      // Who picked this map
+      const pb = pickedMaps[idx];
+      const pickerName = pb?.pickedBy || null;
+      const pickerIsSwe = pb?.teamId && (pb.teamId === t1?.id && t1swe || pb.teamId === t2?.id && t2swe);
+      const pickerLabel = pickerName
+        ? `<span class="map-picker" style="color:${pickerIsSwe?'var(--accent2)':'var(--muted)'}">${pickerName} pick</span>`
+        : '';
+
+      let statusLabel, statusClass;
+      if (isLive)    { statusLabel = '● LIVE';    statusClass = 'live'; }
+      else if (isDone) { statusLabel = 'END';      statusClass = 'done'; }
+      else             { statusLabel = 'NEXT';     statusClass = 'pending'; }
+
+      const { r1, r2 } = isDone || isLive ? extractRoundScore(g, t1?.id, t2?.id) : { r1: null, r2: null };
+      const tot = ((r1||0) + (r2||0)) || 1;
+
+      mapsHtml += `<div class="map-item ${isPending?'map-pending':''}">
         <div class="map-name-row">
-          <span class="map-name">${mn}</span>
-          <span class="map-status ${run?'live':''}">${run?'● LIVE':'END'}</span>
+          <span class="map-name" style="${isPending?'color:var(--muted)':isLive?'color:#fff':''}">${mn}</span>
+          <span class="map-status ${statusClass}">${statusLabel}</span>
         </div>
-        <div class="map-score-row">
-          <span class="map-score left ${r1>r2?'win':!run?'lose':''}">${r1}</span>
+        ${pickerLabel}
+        ${!isPending ? `<div class="map-score-row">
+          <span class="map-score left ${r1>r2?'win':isDone?'lose':''}">${r1??'—'}</span>
           <span class="map-dash">:</span>
-          <span class="map-score right ${r2>r1?'win':!run?'lose':''}">${r2}</span>
-        </div>
-        ${run?`<div class="round-bar">
-          <div class="ct" style="width:${Math.round(r1/tot*100)}%"></div>
-          <div class="t"  style="width:${Math.round(r2/tot*100)}%"></div>
-        </div>`:''}
+          <span class="map-score right ${r2>r1?'win':isDone?'lose':''}">${r2??'—'}</span>
+        </div>` : '<div style="height:22px"></div>'}
+        ${isLive ? `<div class="round-bar">
+          <div class="ct" style="width:${Math.round((r1||0)/tot*100)}%"></div>
+          <div class="t"  style="width:${Math.round((r2||0)/tot*100)}%"></div>
+        </div>` : ''}
       </div>`;
     });
     mapsHtml += `</div>`;
