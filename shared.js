@@ -17,14 +17,21 @@ let _sweLoaded   = false;
 async function ensureSwedishData() {
   if (_sweLoaded) return;
   try {
-    const players = await pandaFetch('/csgo/players?filter[nationality]=SE&per_page=100');
+    // Paginate through all Swedish players — 100 per page until we get them all
     _sweTeamData = {};
-    players.forEach(p => {
-      const tid = p.current_team?.id;
-      if (!tid) return;
-      if (!_sweTeamData[tid]) _sweTeamData[tid] = { count: 0, isFull: false };
-      _sweTeamData[tid].count++;
-    });
+    let page = 1;
+    while (true) {
+      const players = await pandaFetch(`/csgo/players?filter[nationality]=SE&per_page=100&page=${page}`);
+      if (!players.length) break;
+      players.forEach(p => {
+        const tid = p.current_team?.id;
+        if (!tid) return;
+        if (!_sweTeamData[tid]) _sweTeamData[tid] = { count: 0, isFull: false };
+        _sweTeamData[tid].count++;
+      });
+      if (players.length < 100) break; // last page
+      page++;
+    }
     Object.values(_sweTeamData).forEach(d => { d.isFull = d.count >= 5; });
   } catch (_) { /* non-fatal */ }
   _sweLoaded = true;
@@ -106,17 +113,6 @@ function extractRoundScore(game, t1Id, t2Id) {
   if (r1 === 0 && r2 === 0 && game.score && typeof game.score === 'object') {
     const vals = Object.values(game.score).filter(v => typeof v === 'number');
     if (vals.length >= 2) { r1 = vals[0]; r2 = vals[1]; }
-  }
-
-  // 4. game.rounds_score — used by /csgo/games/running
-  // Shape: [{team_id, score}] or [{team: {id}, score}]
-  if (r1 === 0 && r2 === 0 && game.rounds_score?.length) {
-    game.rounds_score.forEach(rs => {
-      const tid   = rs.team_id ?? rs.team?.id;
-      const score = rs.score ?? 0;
-      if (tid === t1Id)      r1 = Math.max(r1, score);
-      else if (tid === t2Id) r2 = Math.max(r2, score);
-    });
   }
 
   return { r1, r2 };
