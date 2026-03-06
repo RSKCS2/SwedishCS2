@@ -1,85 +1,59 @@
 /**
- * SWE CS2 Tracker — Cloudflare Worker Proxy
+ * SWE CS2 Tracker — Cloudflare Worker (GRID API Proxy)
  *
- * Proxies requests from your GitHub Pages site to PandaScore API.
- * Your API key lives ONLY here as an environment secret — never in frontend code.
+ * Proxies GraphQL requests to GRID's two endpoints:
+ *   POST /central → api-op.grid.gg/central-data/graphql     (schedule, teams, series)
+ *   POST /live    → api-op.grid.gg/live-data-feed/series-state/graphql (live round scores)
  *
- * SETUP (one-time, ~5 minutes):
- * ─────────────────────────────
- * 1. Go to https://dash.cloudflare.com → Workers & Pages → Create Worker
- * 2. Paste this entire file into the editor, click "Deploy"
- * 3. Go to your Worker → Settings → Variables → Add variable:
- *      Name:  PANDASCORE_TOKEN
- *      Value: your PandaScore API key
- *      ✓ Check "Encrypt" to store it as a secret
- * 4. Click "Deploy" again after saving the variable
- * 5. Copy your Worker URL  (e.g. https://swe-cs2.YOUR-NAME.workers.dev)
- * 6. Paste it into shared.js  →  const WORKER_URL = 'https://...'
- *
- * That's it. Your key is never exposed to the browser.
+ * Secret: GRID_TOKEN  (Cloudflare → Worker → Settings → Variables & Secrets)
  */
 
-// ── CORS ─────────────────────────────────────────────────────────────────────
-// Allow requests from your GitHub Pages domain AND localhost for local dev.
-// If you want to lock it down further, replace the wildcard with your exact domain.
 const ALLOWED_ORIGINS = [
-  'https://YOUR-GITHUB-USERNAME.github.io',   // ← replace with your GitHub Pages URL
-  'http://localhost:8080',
-  'http://127.0.0.1:8080',
+  'https://rskcs2.github.io',
 ];
+
+const GRID_CENTRAL = 'https://api-op.grid.gg/central-data/graphql';
+const GRID_LIVE    = 'https://api-op.grid.gg/live-data-feed/series-state/graphql';
 
 function corsHeaders(origin) {
   const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
   return {
-    'Access-Control-Allow-Origin': allowed,
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Origin':  allowed,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Max-Age': '86400',
+    'Access-Control-Max-Age':       '86400',
   };
 }
 
-// ── MAIN HANDLER ─────────────────────────────────────────────────────────────
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
 
-    // Handle CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders(origin) });
     }
-
-    if (request.method !== 'GET') {
+    if (request.method !== 'POST') {
       return new Response('Method not allowed', { status: 405 });
     }
 
-    // Extract the PandaScore path + query from the incoming URL
-    // e.g. /csgo/matches/running?per_page=50&include=games,opponents
-    const url = new URL(request.url);
-    const pandaPath = url.pathname + url.search;
+    const path = new URL(request.url).pathname;
+    const gridEndpoint = path === '/central' ? GRID_CENTRAL
+                       : path === '/live'    ? GRID_LIVE
+                       : null;
 
-    // Only allow requests to the CS:GO / CS2 section of PandaScore
-    if (!pandaPath.startsWith('/csgo/')) {
-      return new Response('Not found', { status: 404 });
-    }
+    if (!gridEndpoint) return new Response('Not found', { status: 404 });
 
-    // Forward to PandaScore with the secret token
-    const pandaURL = `https://api.pandascore.co${pandaPath}`;
-    const pandaResponse = await fetch(pandaURL, {
-      headers: {
-        'Authorization': `Bearer ${env.PANDASCORE_TOKEN}`,
-        'Accept': 'application/json',
-      },
+    const body = await request.text();
+    const gridResponse = await fetch(gridEndpoint, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': env.GRID_TOKEN },
+      body,
     });
 
-    const data = await pandaResponse.text();
-
+    const data = await gridResponse.text();
     return new Response(data, {
-      status: pandaResponse.status,
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-store',
-        ...corsHeaders(origin),
-      },
+      status: gridResponse.status,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...corsHeaders(origin) },
     });
   },
 };
