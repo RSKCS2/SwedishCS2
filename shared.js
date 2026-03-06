@@ -71,35 +71,39 @@ function extractMapScore(match) {
 /**
  * Extract ROUND score for a single game (map).
  *
- * PandaScore behaviour:
- *  - Finished map  → scores are in game.results[]
- *  - Running map   → scores are in game.teams[] (each team has a .score property)
- *                    OR sometimes game.results[] is already partially populated
- *
- * We try every known location and return the highest values found.
+ * PandaScore puts live scores in different places depending on API version:
+ *  - game.teams[].score           (most common for live)
+ *  - game.teams[].team_score
+ *  - game.results[].score         (finished maps, sometimes live too)
+ *  - game.players grouped by team (rare fallback)
  */
 function extractRoundScore(game, t1Id, t2Id) {
   let r1 = 0, r2 = 0;
 
-  // 1. game.results (works for finished maps, sometimes live too)
-  if (game.results?.length) {
-    game.results.forEach(r => {
-      if (r.team_id === t1Id) r1 = Math.max(r1, r.score || 0);
-      else if (r.team_id === t2Id) r2 = Math.max(r2, r.score || 0);
-    });
-  }
-
-  // 2. game.teams (PandaScore puts live round scores here for running maps)
+  // 1. game.teams — PandaScore live scores
+  // Shape A: [{team: {id}, score: N}]
+  // Shape B: [{team_id: N, score: N}]
   if (game.teams?.length) {
     game.teams.forEach(t => {
-      const score = t.score ?? t.kills ?? 0;
-      if (t.team?.id === t1Id || t.id === t1Id) r1 = Math.max(r1, score);
-      else if (t.team?.id === t2Id || t.id === t2Id) r2 = Math.max(r2, score);
+      const tid   = t.team?.id ?? t.team_id ?? t.id;
+      const score = t.score ?? t.team_score ?? t.kills ?? 0;
+      if (tid === t1Id)      r1 = Math.max(r1, score);
+      else if (tid === t2Id) r2 = Math.max(r2, score);
     });
   }
 
-  // 3. game.score (some older API responses use a simple {blue,orange} shape)
-  if (game.score && r1 === 0 && r2 === 0) {
+  // 2. game.results — authoritative for finished, sometimes populated live too
+  if (game.results?.length) {
+    game.results.forEach(r => {
+      const tid   = r.team_id ?? r.team?.id;
+      const score = r.score ?? 0;
+      if (tid === t1Id)      r1 = Math.max(r1, score);
+      else if (tid === t2Id) r2 = Math.max(r2, score);
+    });
+  }
+
+  // 3. game.score flat object {home, away} or {blue, orange} — last resort
+  if (r1 === 0 && r2 === 0 && game.score && typeof game.score === 'object') {
     const vals = Object.values(game.score).filter(v => typeof v === 'number');
     if (vals.length >= 2) { r1 = vals[0]; r2 = vals[1]; }
   }

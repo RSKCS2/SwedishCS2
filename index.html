@@ -165,18 +165,27 @@ async function fetchMatches() {
   try {
     await ensureSwedishData();
 
-    const [running, upcoming] = await Promise.all([
-      pandaFetch('/csgo/matches/running?per_page=50&include=games,opponents,picks_bans'),
-      pandaFetch('/csgo/matches/upcoming?per_page=30&sort=begin_at&include=opponents,picks_bans'),
+    // Step 1: get running + upcoming lists (lightweight, no games detail needed yet)
+    const [runningList, upcomingList] = await Promise.all([
+      pandaFetch('/csgo/matches/running?per_page=50&include=opponents'),
+      pandaFetch('/csgo/matches/upcoming?per_page=30&sort=begin_at&include=opponents'),
     ]);
 
-    const sweRunning  = running.filter(hasSweTeam);
-    const sweUpcoming = upcoming.filter(hasSweTeam);
+    const sweRunningIds  = runningList.filter(hasSweTeam).map(m => m.id);
+    const sweUpcomingRaw = upcomingList.filter(hasSweTeam);
+
+    // Step 2: fetch full details for each live Swedish match individually
+    // Full match endpoint returns picks_bans and accurate game.teams scores
+    const sweRunning = sweRunningIds.length
+      ? await Promise.all(sweRunningIds.map(id =>
+          pandaFetch(`/csgo/matches/${id}`)
+        ))
+      : [];
 
     const scoreKey = buildScoreKey(sweRunning);
     if (scoreKey !== lastScoreKey) {
       lastScoreKey = scoreKey;
-      renderMatches(sweRunning, sweUpcoming);
+      renderMatches(sweRunning, sweUpcomingRaw);
     }
 
     document.getElementById('last-update').textContent =
@@ -184,7 +193,7 @@ async function fetchMatches() {
 
     schedulePoll(sweRunning.length > 0
       ? INTERVAL_LIVE
-      : sweUpcoming.length > 0 ? INTERVAL_UPCOMING : INTERVAL_IDLE);
+      : sweUpcomingRaw.length > 0 ? INTERVAL_UPCOMING : INTERVAL_IDLE);
 
   } catch (err) {
     document.getElementById('content').innerHTML = `
@@ -266,6 +275,15 @@ function renderCard(match, live, delay) {
   const { t1Maps, t2Maps } = extractMapScore(match);
   const t1Win  = match.winner?.id === t1?.id;
   const t2Win  = match.winner?.id === t2?.id;
+
+  // Debug: log raw game data to console so we can see exact PandaScore field shapes
+  if (live && games.length) {
+    console.log(`[SWE CS2] Match ${match.id} games:`, JSON.stringify(games.map(g => ({
+      id: g.id, status: g.status, map: g.map,
+      teams: g.teams, results: g.results, score: g.score,
+    })), null, 2));
+    console.log(`[SWE CS2] Match ${match.id} picks_bans:`, match.picks_bans);
+  }
 
   const tournament = match.tournament?.name || match.league?.name || 'CS2';
   const bo         = match.number_of_games ? `BO${match.number_of_games}` : 'BO?';
