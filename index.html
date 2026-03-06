@@ -163,45 +163,57 @@ window.addEventListener('DOMContentLoaded', () => { fetchMatches(); });
 
 async function fetchMatches() {
   try {
+    // Step 1: PandaScore detects Swedish matches
+    await ensureSwedishData();
+    const [runningList, upcomingList] = await Promise.all([
+      pandaFetch('/csgo/matches/running?per_page=50&include=opponents,results'),
+      pandaFetch('/csgo/matches/upcoming?per_page=30&sort=begin_at&include=opponents'),
+    ]);
+    const sweRunning  = runningList.filter(hasSweTeam);
+    const sweUpcoming = upcomingList.filter(hasSweTeam);
+
+    // Step 2: GRID fetches CS2 series for same window (for live round scores)
     const now = new Date();
-    const gte = new Date(now - 2 * 60 * 60 * 1000).toISOString();
+    const gte = new Date(now - 3 * 60 * 60 * 1000).toISOString();
     const lte = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    const data = await gridFetch('/central', QUERY_LIVE_SERIES, { gte, lte });
-    const allSeries = data.allSeries.edges.map(e => e.node);
-    const cs2Series = allSeries.filter(s => s.title?.nameShortened === 'cs2');
-    console.log('[GRID] CS2 teams:', [...new Set(cs2Series.flatMap(s => s.teams?.map(t => t.baseInfo?.name) || []))].sort().join(', '));
-    const isSwe       = s => s.teams?.some(t => isSwedishTeam(t.baseInfo?.name));
-    const nowMs = Date.now();
-    const sweSeries   = allSeries.filter(s => isSwe(s) && new Date(s.startTimeScheduled).getTime() <= nowMs);
-    const sweUpcoming = allSeries.filter(s => isSwe(s) && new Date(s.startTimeScheduled).getTime() >  nowMs);
+    let gridSeries = [];
+    try {
+      const gridData = await gridFetch('/central', QUERY_CS2_SERIES, { gte, lte });
+      gridSeries = (gridData?.allSeries?.edges || [])
+        .map(e => e.node)
+        .filter(s => s.title?.nameShortened === 'cs2');
+    } catch (e) { console.warn('[GRID] Central fetch failed:', e); }
 
-    // For each live Swedish series, fetch live round scores (Series State)
-    // Series State API is limited to 10 req/min — fine for small number of live matches
-    let sweLive = [];
-    if (sweSeries.length) {
-      const stateResults = await Promise.allSettled(
-        sweSeries.map(s => gridFetch('/live', QUERY_SERIES_STATE, { id: s.id }))
-      );
-      sweLive = sweSeries.map((s, i) => ({
-        ...s,
-        state: stateResults[i].status === 'fulfilled' ? stateResults[i].value?.seriesState : null,
-      }));
-    }
+    // Step 3: Match each live PandaScore match to a GRID series by team name
+    // Then fetch GRID series-state for live round scores
+    const enriched = await Promise.all(sweRunning.map(async match => {
+      const t1 = match.opponents?.[0]?.opponent;
+      const t2 = match.opponents?.[1]?.opponent;
+      const gridMatch = findGridSeries(t1?.name, t2?.name, gridSeries);
+      let state = null;
+      if (gridMatch) {
+        try {
+          const sd = await gridFetch('/live', QUERY_SERIES_STATE, { id: gridMatch.id });
+          state = sd?.seriesState || null;
+        } catch (e) { console.warn('[GRID] State fetch failed for', gridMatch.id, e); }
+      }
+      return { ...match, gridMatch, state };
+    }));
 
-    const scoreKey = JSON.stringify(sweLive.map(s => ({
-      id: s.id,
-      scores: s.state?.games?.map(g => g.teams?.map(t => t.score)),
+    const scoreKey = JSON.stringify(enriched.map(m => ({
+      id: m.id,
+      games: m.state?.games?.map(g => g.teams?.map(t => t.score)),
     })));
 
     if (scoreKey !== lastScoreKey) {
       lastScoreKey = scoreKey;
-      renderMatches(sweLive, sweUpcoming);
+      renderMatches(enriched, sweUpcoming);
     }
 
     document.getElementById('last-update').textContent =
       'Updated ' + new Date().toLocaleTimeString('sv-SE');
 
-    schedulePoll(sweLive.length > 0
+    schedulePoll(enriched.length > 0
       ? INTERVAL_LIVE
       : sweUpcoming.length > 0 ? INTERVAL_UPCOMING : INTERVAL_IDLE);
 
@@ -211,10 +223,7 @@ async function fetchMatches() {
       <div class="state-card">
         <div class="icon">⚠️</div>
         <h3>Connection Error</h3>
-        <p>${err.status === 401 ? 'API key rejected — check GRID_TOKEN in Cloudflare.'
-           : err.status === 403 ? 'Access denied — check your GRID plan.'
-           : err.status ? 'API error ' + err.status + '.'
-           : 'Could not reach the Worker. Check the URL in shared.js.'}</p>
+        <p>${err.status ? 'API error ' + err.status + '.' : 'Could not reach the Worker. Check the URL in shared.js.'}</p>
       </div>`;
     schedulePoll(INTERVAL_IDLE);
   }
@@ -224,8 +233,8 @@ function schedulePoll(interval) {
   clearTimeout(pollTimer); clearInterval(tickTimer);
   pollInterval = interval; countdown = interval;
   updatePollUI();
-  pollTimer  = setTimeout(() => fetchMatches(), interval * 1000);
-  tickTimer  = setInterval(() => { countdown = Math.max(0, countdown - 1); updatePollUI(); }, 1000);
+  pollTimer = setTimeout(() => fetchMatches(), interval * 1000);
+  tickTimer = setInterval(() => { countdown = Math.max(0, countdown - 1); updatePollUI(); }, 1000);
 }
 
 function updatePollUI() {
@@ -248,96 +257,80 @@ function updatePollUI() {
 function renderMatches(live, upcoming) {
   let html = '';
   if (!live.length && !upcoming.length) {
-    html = `<div class="state-card"><div class="icon">📡</div><h3>No Swedish Matches Right Now</h3><p>No live or upcoming CS2 matches with Swedish teams at the moment.</p></div>`;
+    html = `<div class="state-card"><div class="icon">📡</div><h3>No Swedish Matches Right Now</h3><p>No live or upcoming CS2 matches with Swedish players at the moment.</p></div>`;
   } else {
     if (live.length) {
       html += `<div class="section-label">Live Now — ${live.length} match${live.length !== 1?'es':''}</div>`;
-      live.forEach((s, i) => { html += renderCard(s, true, i * 50); });
+      live.forEach((m, i) => { html += renderCard(m, true, i * 50); });
     }
     if (upcoming.length) {
       html += `<div class="section-label upcoming">Upcoming</div>`;
-      upcoming.forEach((s, i) => { html += renderCard(s, false, i * 40); });
+      upcoming.forEach((m, i) => { html += renderCard(m, false, i * 40); });
     }
   }
   document.getElementById('content').innerHTML = html;
 }
 
-function renderCard(series, live, delay) {
-  const t1    = series.teams?.[0];
-  const t2    = series.teams?.[1];
-  const t1Name = t1?.baseInfo?.name || 'TBD';
-  const t2Name = t2?.baseInfo?.name || 'TBD';
-  const t1Swe  = isSwedishTeam(t1Name);
-  const t2Swe  = isSwedishTeam(t2Name);
-
-  // scoreAdvantage = maps won advantage; derive actual map scores from games
-  const t1Maps = t1?.scoreAdvantage ?? 0;
-  const t2Maps = t2?.scoreAdvantage ?? 0;
-  const finished = series.finished;
-  const t1Win    = finished && t1Maps > t2Maps;
-  const t2Win    = finished && t2Maps > t1Maps;
-
-  const tournament = series.tournament?.name || 'CS2';
-  const bo         = seriesFormat(series);
-  const timeStr    = live
+function renderCard(match, live, delay) {
+  const t1      = match.opponents?.[0]?.opponent;
+  const t2      = match.opponents?.[1]?.opponent;
+  const t1swe   = sweInfo(t1);
+  const t2swe   = sweInfo(t2);
+  const { t1Maps, t2Maps } = extractMapScore(match);
+  const t1Win   = match.winner?.id === t1?.id;
+  const t2Win   = match.winner?.id === t2?.id;
+  const bo      = match.number_of_games ? 'BO' + match.number_of_games : 'BO?';
+  const tournament = match.tournament?.name || match.league?.name || 'CS2';
+  const timeStr = live
     ? 'LIVE'
-    : new Date(series.startTimeScheduled).toLocaleString('sv-SE', { weekday:'short', hour:'2-digit', minute:'2-digit' }).toUpperCase();
+    : new Date(match.begin_at).toLocaleString('sv-SE', { weekday:'short', hour:'2-digit', minute:'2-digit' }).toUpperCase();
 
-  // Live round scores from Series State
-  const state = series.state;
+  // GRID series state for live round scores
+  const state      = match.state;
   const stateGames = state?.games || [];
 
-  // Merge static game info (map name) with live state
-  const games = (series.games || []).map((g, i) => {
-    const sg = stateGames.find(sg => sg.sequenceNumber === g.sequenceNumber) || stateGames[i] || {};
-    const t1Id = t1?.baseInfo?.id;
-    const t2Id = t2?.baseInfo?.id;
-    const t1Score = sg.teams?.find(t => t.id === t1Id)?.score ?? null;
-    const t2Score = sg.teams?.find(t => t.id === t2Id)?.score ?? null;
-    return {
-      ...g,
-      isLive:   sg.started && !sg.finished,
-      isDone:   sg.finished,
-      mapName:  g.map?.name || sg.map?.name || null,
-      t1Score,
-      t2Score,
-    };
-  });
-
-  // Map dots strip
+  // Build game list from GRID state — includes map name and round scores
   let mapsHtml = '';
-  if (live && games.length) {
-    const currentMap = games.find(g => g.isLive);
-    const mapItems = games.map(g => {
-      const mn = formatMapName(g.mapName);
-      if (g.isDone) {
-        const w1 = g.t1Score > g.t2Score, w2 = g.t2Score > g.t1Score;
+  if (live && stateGames.length) {
+    const t1StateName = state?.teams?.find(t => normName(t.name) === normName(t1?.name))?.name
+                     || state?.teams?.[0]?.name;
+    const t2StateName = state?.teams?.find(t => normName(t.name) === normName(t2?.name))?.name
+                     || state?.teams?.[1]?.name;
+
+    const mapItems = stateGames.map(g => {
+      const isLive  = g.started && !g.finished;
+      const isDone  = g.finished;
+      const r1 = g.teams?.find(t => t.name === t1StateName)?.score ?? null;
+      const r2 = g.teams?.find(t => t.name === t2StateName)?.score ?? null;
+      const mn = formatMapName(g.map?.name);
+
+      if (isDone) {
         return `<div class="map-item">
           <div class="map-name-row">
             <span class="map-name">${mn || '—'}</span>
             <span class="map-status done">END</span>
           </div>
           <div class="map-score-row">
-            <span class="map-score left ${w1?'win':'lose'}">${g.t1Score??'—'}</span>
+            <span class="map-score left ${r1>r2?'win':'lose'}">${r1??'—'}</span>
             <span class="map-dash">:</span>
-            <span class="map-score right ${w2?'win':'lose'}">${g.t2Score??'—'}</span>
+            <span class="map-score right ${r2>r1?'win':'lose'}">${r2??'—'}</span>
           </div>
         </div>`;
-      } else if (g.isLive) {
-        const tot = Math.max(1, (g.t1Score||0) + (g.t2Score||0));
+      } else if (isLive) {
+        const tot = Math.max(1, (r1||0) + (r2||0));
         return `<div class="map-item">
           <div class="map-name-row">
             <span class="map-name" style="color:#fff">${mn || '—'}</span>
             <span class="map-status live">● LIVE</span>
           </div>
           <div class="map-score-row">
-            <span class="map-score left">${g.t1Score??'—'}</span>
+            <span class="map-score left">${r1??'—'}</span>
             <span class="map-dash">:</span>
-            <span class="map-score right">${g.t2Score??'—'}</span>
+            <span class="map-score right">${r2??'—'}</span>
           </div>
           <div class="round-bar">
-            <div class="ct" style="width:${Math.round((g.t1Score||0)/tot*100)}%"></div>
-            <div class="t"  style="width:${Math.round((g.t2Score||0)/tot*100)}%"></div>
+            <div class="ct" style="width:${Math.round((r1||0)/tot*100)}%"></div>
+            <div class="t"  style="width:${Math.round((r2||0)/tot*100)}%"></div>
           </div>
         </div>`;
       } else {
@@ -351,6 +344,17 @@ function renderCard(series, live, delay) {
       }
     }).join('');
     mapsHtml = `<div class="match-card__maps">${mapItems}</div>`;
+  } else if (live && !stateGames.length) {
+    // PandaScore says it's live but no GRID match found — show map dots
+    const dots = Array.from({ length: match.number_of_games || 1 }, (_, i) => {
+      const done = i < t1Maps + t2Maps;
+      const cur  = i === t1Maps + t2Maps;
+      const c = done ? 'var(--muted)' : cur ? 'var(--accent2)' : 'var(--border)';
+      return `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};${cur?'box-shadow:0 0 7px var(--accent2)':''}"></span>`;
+    }).join('');
+    mapsHtml = `<div style="padding:9px 18px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px">
+      <span style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.1em;margin-right:2px">MAPS</span>${dots}
+    </div>`;
   }
 
   return `
@@ -364,10 +368,10 @@ function renderCard(series, live, delay) {
       <div class="teams-section">
         <div class="team-col">
           <div class="team-row">
-            ${teamLogo(t1?.baseInfo)}
-            <span class="team-name${t1Win?' winner':''}${t1Swe?' swe-hl':''}">${t1Name}</span>
+            ${teamLogo(t1)}
+            <span class="team-name${t1Win?' winner':''}${t1swe?' swe-hl':''}">${t1?.name||'TBD'}</span>
           </div>
-          ${swePill(t1Swe)}
+          ${swePill(t1swe)}
         </div>
         <div class="score-section">
           <div class="score-main">
@@ -379,10 +383,10 @@ function renderCard(series, live, delay) {
         </div>
         <div class="team-col right">
           <div class="team-row right">
-            ${teamLogo(t2?.baseInfo)}
-            <span class="team-name${t2Win?' winner':''}${t2Swe?' swe-hl':''}">${t2Name}</span>
+            ${teamLogo(t2)}
+            <span class="team-name${t2Win?' winner':''}${t2swe?' swe-hl':''}">${t2?.name||'TBD'}</span>
           </div>
-          ${swePill(t2Swe, 'right')}
+          ${swePill(t2swe, 'right')}
         </div>
       </div>
     </div>
