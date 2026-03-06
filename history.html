@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="sv">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SWE CS2 · Results History</title>
+  <title>SWE CS2 · Resultathistorik</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500&display=swap" rel="stylesheet" />
   <style>
@@ -23,12 +23,10 @@
     .logo-flag::after{content:'';position:absolute;top:0;left:22%;width:16%;height:100%;background:#FECC02}
     .logo-text{font-family:var(--display);font-size:22px;font-weight:800;letter-spacing:.08em;color:#fff;text-transform:uppercase}
     .logo-text span{color:var(--accent)}
-    /* grid-column:2 → always in the exact center */
     nav{display:flex;gap:4px;justify-content:center}
     nav a{font-family:var(--display);font-size:14px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-decoration:none;padding:6px 16px;border-radius:4px;border:1px solid transparent;transition:color .15s,background .15s,border-color .15s}
     nav a:hover{color:var(--text);background:var(--surface2)}
     nav a.active{color:var(--accent);background:rgba(240,208,0,.08);border-color:rgba(240,208,0,.25)}
-    /* empty right column keeps nav truly centered */
     .header-spacer{display:flex;justify-content:flex-end}
 
     /* ── MAIN ── */
@@ -47,13 +45,11 @@
     /* ── STATS PANELS ── */
     .stats-section{margin-bottom:24px;display:flex;flex-direction:column;gap:10px}
 
-    /* Period tabs */
     .period-tabs{display:flex;gap:4px;flex-wrap:wrap}
     .period-tab{font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:5px 14px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:all .15s}
     .period-tab:hover{color:var(--text);border-color:var(--text)}
     .period-tab.active{color:var(--accent);background:rgba(240,208,0,.08);border-color:rgba(240,208,0,.25)}
 
-    /* Stats grid */
     .stats-bar{display:flex;gap:1px;border-radius:6px;overflow:hidden;border:1px solid var(--border)}
     .stat-item{flex:1;padding:14px 16px;background:var(--surface);text-align:center}
     .stat-value{font-family:var(--mono);font-size:26px;color:#fff;line-height:1;margin-bottom:4px}
@@ -61,8 +57,6 @@
     .stat-value.yellow{color:var(--accent)}
     .stat-value.red{color:var(--red)}
     .stat-label{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)}
-    /* period label inside stat bar */
-    .stats-period-label{font-family:var(--display);font-size:10px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);text-align:right;padding:4px 2px 0}
 
     /* ── RESULT CARD ── */
     .result-card{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:6px;margin-bottom:8px;overflow:hidden;transition:border-color .2s;animation:cardIn .25s ease both}
@@ -97,9 +91,13 @@
     .result-card__maps{display:none;border-top:1px solid var(--border);background:rgba(0,0,0,.15)}
     .result-card__maps.open{display:block}
     .maps-grid{display:flex;flex-wrap:wrap}
-    .map-pill{flex:1;min-width:90px;padding:10px 14px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+    .map-pill{flex:1;min-width:90px;padding:10px 14px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:5px}
     .map-pill:last-child{border-right:none}
-    .mp-name{font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+    .mp-name{font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:#fff;margin-bottom:2px}
+    .mp-picker{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .mp-picker .lbl{opacity:.7;margin-right:3px}
+    .mp-picker .team{color:var(--accent)}
+    .mp-picker .decider{font-style:italic}
     .mp-score{font-family:var(--mono);font-size:20px;display:flex;gap:4px;align-items:baseline}
     .mp-score .sep{font-size:15px;color:var(--muted)}
     .mp-score .w{color:var(--accent2)}
@@ -121,7 +119,17 @@
     @keyframes spin{to{transform:rotate(360deg)}}
     .pagination-info{font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;padding:14px 0}
 
-    @media(max-width:600px){.result-tournament{display:none}.rt-name{font-size:13px}.rs-main{font-size:16px}.stats-bar{flex-wrap:wrap}.stat-item{min-width:48%}.result-card__row{flex-wrap:wrap;gap:8px}.result-date{min-width:auto}.result-teams{width:100%}.rt-namerow{gap:5px}}
+    @media(max-width:600px){
+      .result-tournament{display:none}
+      .rt-name{font-size:13px}
+      .rs-main{font-size:16px}
+      .stats-bar{flex-wrap:wrap}
+      .stat-item{min-width:48%}
+      .result-card__row{flex-wrap:wrap;gap:8px}
+      .result-date{min-width:auto}
+      .result-teams{width:100%}
+      .rt-namerow{gap:5px}
+    }
   </style>
 </head>
 <body>
@@ -133,41 +141,41 @@
   </a>
   <nav>
     <a href="index.html">Live</a>
-    <a href="history.html" class="active">History</a>
+    <a href="history.html" class="active">Historik</a>
   </nav>
   <div class="header-spacer"></div>
 </header>
 
 <main>
-  <div class="page-title">Results History · Swedish CS2 Tracker</div>
+  <div class="page-title">Resultathistorik · Svensk CS2-tracker</div>
 
   <div class="controls">
     <div class="search-wrap">
       <input id="search-input" type="text" autocomplete="off"
-             placeholder="Search team or tournament…" oninput="onSearch(this.value)" />
+             placeholder="Sök lag eller turnering…" oninput="onSearch(this.value)" />
     </div>
   </div>
 
   <div id="stats-section" class="stats-section" style="display:none">
     <div class="period-tabs">
-      <button class="period-tab active" onclick="setPeriod('year')">This year</button>
-      <button class="period-tab" onclick="setPeriod('9m')">9 months</button>
-      <button class="period-tab" onclick="setPeriod('6m')">6 months</button>
-      <button class="period-tab" onclick="setPeriod('3m')">3 months</button>
-      <button class="period-tab" onclick="setPeriod('month')">This month</button>
-      <button class="period-tab" onclick="setPeriod('week')">This week</button>
-      <button class="period-tab" onclick="setPeriod('day')">Today</button>
+      <button class="period-tab active" onclick="setPeriod('year')">I år</button>
+      <button class="period-tab" onclick="setPeriod('9m')">9 månader</button>
+      <button class="period-tab" onclick="setPeriod('6m')">6 månader</button>
+      <button class="period-tab" onclick="setPeriod('3m')">3 månader</button>
+      <button class="period-tab" onclick="setPeriod('month')">Den här månaden</button>
+      <button class="period-tab" onclick="setPeriod('week')">Den här veckan</button>
+      <button class="period-tab" onclick="setPeriod('day')">Idag</button>
     </div>
     <div class="stats-bar">
-      <div class="stat-item"><div class="stat-value" id="stat-total">—</div><div class="stat-label">Matches</div></div>
-      <div class="stat-item"><div class="stat-value green" id="stat-wins">—</div><div class="stat-label">SWE Wins</div></div>
-      <div class="stat-item"><div class="stat-value red" id="stat-losses">—</div><div class="stat-label">SWE Losses</div></div>
-      <div class="stat-item"><div class="stat-value yellow" id="stat-winrate">—</div><div class="stat-label">Win Rate</div></div>
+      <div class="stat-item"><div class="stat-value" id="stat-total">—</div><div class="stat-label">Matcher</div></div>
+      <div class="stat-item"><div class="stat-value green" id="stat-wins">—</div><div class="stat-label">SWE Vinster</div></div>
+      <div class="stat-item"><div class="stat-value red" id="stat-losses">—</div><div class="stat-label">SWE Förluster</div></div>
+      <div class="stat-item"><div class="stat-value yellow" id="stat-winrate">—</div><div class="stat-label">Vinstprocent</div></div>
     </div>
   </div>
 
   <div id="content">
-    <div class="state-card"><div class="spinner"></div><p>Loading match history…</p></div>
+    <div class="state-card"><div class="spinner"></div><p>Laddar matchhistorik…</p></div>
   </div>
 </main>
 
@@ -194,7 +202,6 @@ function loadAndPruneHistory() {
     const raw = localStorage.getItem(HISTORY_KEY);
     if (!raw) return [];
     const matches = JSON.parse(raw);
-    // Auto-purge matches from previous years
     const yearStart = new Date(new Date().getFullYear(), 0, 1);
     const pruned = matches.filter(m => new Date(m.end_at || m.begin_at) >= yearStart);
     if (pruned.length !== matches.length) saveHistory(pruned);
@@ -210,14 +217,11 @@ async function fetchAndMerge() {
   try {
     await ensureSwedishData();
 
-    // Figure out what date range we still need to fetch
-    // Always fetch from Jan 1st of this year, but only what we might be missing
     const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
     const today     = new Date().toISOString().split('T')[0];
 
-    // Fetch all pages until we hit matches we already have stored
     const storedIds = new Set(allMatches.map(m => m.id));
-    let page = 1, merged = false, newMatches = [];
+    let page = 1, newMatches = [];
 
     while (true) {
       const batch = await pandaFetch(
@@ -228,19 +232,17 @@ async function fetchAndMerge() {
       const sweeBatch = batch.filter(hasSweTeam);
       newMatches.push(...sweeBatch);
 
-      // If all matches in this batch are already stored, we're caught up
       const allKnown = batch.every(m => storedIds.has(m.id));
       if (allKnown || batch.length < 50) break;
 
       page++;
-      if (page > 10) break; // safety cap — 500 matches max
+      if (page > 10) break;
     }
 
-    // Merge with stored — dedupe by id
     const byId = {};
     allMatches.forEach(m => { byId[m.id] = m; });
     newMatches.forEach(m => { byId[m.id] = m; });
-    allMatches = Object.values(byId).sort((a,b) =>
+    allMatches = Object.values(byId).sort((a, b) =>
       new Date(b.end_at || b.begin_at) - new Date(a.end_at || a.begin_at)
     );
 
@@ -253,8 +255,8 @@ async function fetchAndMerge() {
     if (!allMatches.length) {
       document.getElementById('content').innerHTML = `
         <div class="state-card">
-          <div class="icon">⚠️</div><h3>Connection Error</h3>
-          <p>${err.status ? 'API error ' + err.status + '.' : 'Could not reach the Worker.'}</p>
+          <div class="icon">⚠️</div><h3>Anslutningsfel</h3>
+          <p>${err.status ? 'API-fel ' + err.status + '.' : 'Kunde inte nå servern.'}</p>
         </div>`;
     }
   }
@@ -284,9 +286,9 @@ function periodStart(period) {
 
 function matchesSearch(match) {
   if (!searchQuery) return true;
-  const t1   = match.opponents?.[0]?.opponent?.name?.toLowerCase()||'';
-  const t2   = match.opponents?.[1]?.opponent?.name?.toLowerCase()||'';
-  const tour = (match.tournament?.name||match.league?.name||'').toLowerCase();
+  const t1   = match.opponents?.[0]?.opponent?.name?.toLowerCase() || '';
+  const t2   = match.opponents?.[1]?.opponent?.name?.toLowerCase() || '';
+  const tour = (match.tournament?.name || match.league?.name || '').toLowerCase();
   return t1.includes(searchQuery) || t2.includes(searchQuery) || tour.includes(searchQuery);
 }
 
@@ -312,7 +314,7 @@ function renderResults() {
   });
 
   const { total, wins, losses } = calcStats(filtered);
-  const wr = (wins + losses) > 0 ? Math.round(wins/(wins+losses)*100)+'%' : '—';
+  const wr = (wins + losses) > 0 ? Math.round(wins / (wins + losses) * 100) + '%' : '—';
   document.getElementById('stat-total').textContent   = total;
   document.getElementById('stat-wins').textContent    = wins;
   document.getElementById('stat-losses').textContent  = losses;
@@ -320,15 +322,15 @@ function renderResults() {
 
   if (!filtered.length) {
     document.getElementById('content').innerHTML = `
-      <div class="state-card"><div class="icon">📂</div><h3>No Results Found</h3>
-      <p>${searchQuery ? 'No matches for "' + searchQuery + '".' : 'No Swedish matches in this period yet.'}</p></div>`;
+      <div class="state-card"><div class="icon">📂</div><h3>Inga resultat hittades</h3>
+      <p>${searchQuery ? 'Inga matcher för "' + searchQuery + '".' : 'Inga svenska matcher under den här perioden ännu.'}</p></div>`;
     return;
   }
 
   const groups = {};
   filtered.forEach(m => {
     const d   = m.end_at ? new Date(m.end_at) : new Date(m.begin_at);
-    const key = d.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    const key = d.toLocaleDateString('sv-SE', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
     if (!groups[key]) groups[key] = [];
     groups[key].push(m);
   });
@@ -336,9 +338,9 @@ function renderResults() {
   let html = '';
   Object.entries(groups).forEach(([date, matches], gi) => {
     html += `<div class="date-group">${date}</div>`;
-    matches.forEach((m, i) => { html += renderResultCard(m, gi*50 + i*30); });
+    matches.forEach((m, i) => { html += renderResultCard(m, gi * 50 + i * 30); });
   });
-  html += `<div class="pagination-info">${filtered.length} matches shown · ${allMatches.length} stored this year</div>`;
+  html += `<div class="pagination-info">${filtered.length} matcher visade · ${allMatches.length} lagrade i år</div>`;
   document.getElementById('content').innerHTML = html;
 }
 
@@ -357,30 +359,46 @@ function renderResultCard(match, delay) {
   const cardId     = 'rc-' + match.id;
 
   const logo = t => t?.image_url
-    ? `<img class="rt-logo" src="${t.image_url}" alt="${t.name||''}" onerror="this.style.display='none'" />`
-    : `<div class="rt-logo-ph">${(t?.name||'?')[0].toUpperCase()}</div>`;
+    ? `<img class="rt-logo" src="${t.image_url}" alt="${t.name || ''}" onerror="this.style.display='none'" />`
+    : `<div class="rt-logo-ph">${(t?.name || '?')[0].toUpperCase()}</div>`;
 
-  const games = (match.games||[]).filter(g => g.status !== 'not_started' && g.status !== 'canceled');
+  const games = (match.games || []).filter(g => g.status !== 'not_started' && g.status !== 'canceled');
+
+  // Extract picks for ordering
+  const picks = extractPicksInOrder(match);
+
   let mapsHtml = '';
   if (games.length) {
-    const items = games.map(g => {
-      const mn = (g.map?.name||'?').replace(/^de_|^cs_/i,'').toUpperCase();
+    const items = games.map((g, idx) => {
+      const mn = formatMapName(g.map?.name);
       const { r1, r2 } = extractRoundScore(g, t1?.id, t2?.id);
+
+      // Pick info
+      const pick = picks[idx] || null;
+      let pickerHtml = '';
+      if (pick) {
+        const isSwe = (t1swe && pick.teamId === t1?.id) || (t2swe && pick.teamId === t2?.id);
+        pickerHtml = `<div class="mp-picker"><span class="lbl">Vald av</span><span class="team${isSwe ? ' swe-hl' : ''}">${pick.teamName || '?'}</span></div>`;
+      } else if (idx >= picks.length && match.number_of_games > 1) {
+        pickerHtml = `<div class="mp-picker"><span class="decider">Avgörande</span></div>`;
+      }
+
       return `<div class="map-pill">
-        <div class="mp-name">${mn}</div>
+        <div class="mp-name">${mn || '?'}</div>
+        ${pickerHtml}
         <div class="mp-score">
-          <span class="${r1>r2?'w':'l'}">${r1}</span><span class="sep">:</span><span class="${r2>r1?'w':'l'}">${r2}</span>
+          <span class="${r1 > r2 ? 'w' : 'l'}">${r1}</span><span class="sep">:</span><span class="${r2 > r1 ? 'w' : 'l'}">${r2}</span>
         </div></div>`;
     }).join('');
     mapsHtml = `
       <div class="result-card__maps" id="${cardId}-maps"><div class="maps-grid">${items}</div></div>
       <button class="expand-btn" onclick="toggleMaps('${cardId}')">
-        <span>MAP SCORES (${games.length})</span><span class="chevron" id="${cardId}-chev">▾</span>
+        <span>KARTPOÄNG (${games.length})</span><span class="chevron" id="${cardId}-chev">▾</span>
       </button>`;
   }
 
-  const t1Class = ['rt-name', t1swe?'swe-hl':(t1Win?'winner':t2Win?'loser':'')].filter(Boolean).join(' ');
-  const t2Class = ['rt-name', t2swe?'swe-hl':(t2Win?'winner':t1Win?'loser':'')].filter(Boolean).join(' ');
+  const t1Class = ['rt-name', t1swe ? 'swe-hl' : (t1Win ? 'winner' : t2Win ? 'loser' : '')].filter(Boolean).join(' ');
+  const t2Class = ['rt-name', t2swe ? 'swe-hl' : (t2Win ? 'winner' : t1Win ? 'loser' : '')].filter(Boolean).join(' ');
 
   return `
   <div class="result-card" style="animation-delay:${delay}ms" id="${cardId}">
@@ -389,23 +407,23 @@ function renderResultCard(match, delay) {
       <div class="result-tournament" title="${tournament}">${tournament}</div>
       <div class="result-teams">
         <div class="rt">
-          <div class="rt-namerow">${logo(t1)}<span class="${t1Class}">${t1?.name||'TBD'}</span></div>
+          <div class="rt-namerow">${logo(t1)}<span class="${t1Class}">${t1?.name || 'TBD'}</span></div>
           <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:2px">
             ${swePill(t1swe)}${!t1swe ? teamLocationBadge(t1) : ''}
           </div>
         </div>
         <div class="result-score">
           <div class="rs-main">
-            <span style="color:${t1Win?'var(--accent2)':t2Win?'var(--muted)':'#fff'}">${t1Maps}</span>
+            <span style="color:${t1Win ? 'var(--accent2)' : t2Win ? 'var(--muted)' : '#fff'}">${t1Maps}</span>
             <span style="color:var(--muted)">:</span>
-            <span style="color:${t2Win?'var(--accent2)':t1Win?'var(--muted)':'#fff'}">${t2Maps}</span>
+            <span style="color:${t2Win ? 'var(--accent2)' : t1Win ? 'var(--muted)' : '#fff'}">${t2Maps}</span>
           </div>
           <div class="rs-label">${bo}</div>
         </div>
         <div class="rt right">
-          <div class="rt-namerow">${logo(t2)}<span class="${t2Class}">${t2?.name||'TBD'}</span></div>
+          <div class="rt-namerow">${logo(t2)}<span class="${t2Class}">${t2?.name || 'TBD'}</span></div>
           <div style="display:flex;gap:5px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin-top:2px">
-            ${!t2swe ? teamLocationBadge(t2) : ''}${swePill(t2swe,'right')}
+            ${!t2swe ? teamLocationBadge(t2) : ''}${swePill(t2swe, 'right')}
           </div>
         </div>
       </div>
@@ -415,8 +433,8 @@ function renderResultCard(match, delay) {
 }
 
 function toggleMaps(id) {
-  const el = document.getElementById(id+'-maps');
-  const ch = document.getElementById(id+'-chev');
+  const el = document.getElementById(id + '-maps');
+  const ch = document.getElementById(id + '-chev');
   if (!el) return;
   ch.classList.toggle('open', el.classList.toggle('open'));
 }

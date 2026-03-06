@@ -118,6 +118,7 @@ const QUERY_SERIES_STATE = `
         sequenceNumber
         started
         finished
+        map { name }
         teams { name score }
       }
     }
@@ -180,11 +181,26 @@ function extractRoundScore(game, t1Id, t2Id) {
   return { r1, r2 };
 }
 
+// ── PICK/BAN HELPERS ──────────────────────────────────────────────────────
+/**
+ * Returns an array of picks in game order (index 0 = game 1, index 1 = game 2, …)
+ * Each entry: { teamId, teamName } or null for deciders (no pick).
+ */
+function extractPicksInOrder(match) {
+  const picks = (match.pick_bans || [])
+    .filter(pb => pb.is_pick)
+    .sort((a, b) => (a.sequence_number ?? 0) - (b.sequence_number ?? 0));
+  return picks.map(pb => ({
+    teamId:   pb.team?.id   ?? null,
+    teamName: pb.team?.name ?? null,
+  }));
+}
+
 // ── UI HELPERS ────────────────────────────────────────────────────────────
 function swePill(info, align = 'left') {
   if (!info) return '';
   const cls  = info.isFull ? 'full' : info.count >= 3 ? 'majority' : 'partial';
-  const text = info.isFull ? '🇸🇪 Full squad' : '🇸🇪 ' + info.count + '/5 Swedish';
+  const text = info.isFull ? '🇸🇪 Fullt lag' : '🇸🇪 ' + info.count + '/5 svenska';
   return `<span class="swe-pill ${cls}" style="${align==='right'?'align-self:flex-end':''}">${text}</span>`;
 }
 
