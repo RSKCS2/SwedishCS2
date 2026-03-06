@@ -200,7 +200,7 @@ function extractPicksInOrder(match) {
 function swePill(info, align = 'left') {
   if (!info) return '';
   const cls  = info.isFull ? 'full' : info.count >= 3 ? 'majority' : 'partial';
-  const text = info.isFull ? '🇸🇪 Fullt lag' : '🇸🇪 ' + info.count + '/5 svenska';
+  const text = info.isFull ? '🇸🇪 Fullt lag' : '🇸🇪 ' + info.count + '/5 ' + (info.count === 1 ? 'Svensk' : 'Svenskar');
   return `<span class="swe-pill ${cls}" style="${align==='right'?'align-self:flex-end':''}">${text}</span>`;
 }
 

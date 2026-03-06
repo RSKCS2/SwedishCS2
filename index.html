@@ -249,7 +249,7 @@ function renderMatches(live, upcoming) {
     html = `<div class="state-card"><div class="icon">📡</div><h3>Inga svenska matcher just nu</h3><p>Det finns inga direktsända eller kommande CS2-matcher med svenska spelare för tillfället.</p></div>`;
   } else {
     if (live.length) {
-      html += `<div class="section-label">Direkt nu — ${live.length} match${live.length !== 1 ? 'er' : ''}</div>`;
+      html += `<div class="section-label"><span class="live-badge" style="font-size:12px;padding:3px 10px"><span class="dot"></span>LIVE</span><span style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:6px">${live.length} match${live.length !== 1 ? 'er' : ''}</span></div>`;
       live.forEach((m, i) => { html += renderCard(m, true, i * 50); });
     }
     if (upcoming.length) {

@@ -102,10 +102,7 @@
     .mp-score .sep{font-size:15px;color:var(--muted)}
     .mp-score .w{color:var(--accent2)}
     .mp-score .l{color:var(--muted)}
-    .expand-btn{background:none;border:none;color:var(--muted);font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;padding:8px 16px;width:100%;text-align:center;border-top:1px solid var(--border);transition:color .15s,background .15s;display:flex;align-items:center;justify-content:center;gap:6px}
-    .expand-btn:hover{color:var(--text);background:rgba(255,255,255,.03)}
-    .chevron{transition:transform .2s;display:inline-block}
-    .chevron.open{transform:rotate(180deg)}
+
 
     .date-group{font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);padding:20px 0 10px;display:flex;align-items:center;gap:10px}
     .date-group::after{content:'';flex:1;height:1px;background:var(--border)}
@@ -364,37 +361,19 @@ function renderResultCard(match, delay) {
 
   const games = (match.games || []).filter(g => g.status !== 'not_started' && g.status !== 'canceled');
 
-  // Extract picks for ordering
-  const picks = extractPicksInOrder(match);
-
+  // Simple always-visible map strip
   let mapsHtml = '';
   if (games.length) {
-    const items = games.map((g, idx) => {
+    const items = games.map(g => {
       const mn = formatMapName(g.map?.name);
       const { r1, r2 } = extractRoundScore(g, t1?.id, t2?.id);
-
-      // Pick info
-      const pick = picks[idx] || null;
-      let pickerHtml = '';
-      if (pick) {
-        const isSwe = (t1swe && pick.teamId === t1?.id) || (t2swe && pick.teamId === t2?.id);
-        pickerHtml = `<div class="mp-picker"><span class="lbl">Vald av</span><span class="team${isSwe ? ' swe-hl' : ''}">${pick.teamName || '?'}</span></div>`;
-      } else if (idx >= picks.length && match.number_of_games > 1) {
-        pickerHtml = `<div class="mp-picker"><span class="decider">Avgörande</span></div>`;
-      }
-
       return `<div class="map-pill">
         <div class="mp-name">${mn || '?'}</div>
-        ${pickerHtml}
         <div class="mp-score">
           <span class="${r1 > r2 ? 'w' : 'l'}">${r1}</span><span class="sep">:</span><span class="${r2 > r1 ? 'w' : 'l'}">${r2}</span>
         </div></div>`;
     }).join('');
-    mapsHtml = `
-      <div class="result-card__maps" id="${cardId}-maps"><div class="maps-grid">${items}</div></div>
-      <button class="expand-btn" onclick="toggleMaps('${cardId}')">
-        <span>KARTPOÄNG (${games.length})</span><span class="chevron" id="${cardId}-chev">▾</span>
-      </button>`;
+    mapsHtml = `<div class="result-card__maps open"><div class="maps-grid">${items}</div></div>`;
   }
 
   const t1Class = ['rt-name', t1swe ? 'swe-hl' : (t1Win ? 'winner' : t2Win ? 'loser' : '')].filter(Boolean).join(' ');
@@ -432,12 +411,7 @@ function renderResultCard(match, delay) {
   </div>`;
 }
 
-function toggleMaps(id) {
-  const el = document.getElementById(id + '-maps');
-  const ch = document.getElementById(id + '-chev');
-  if (!el) return;
-  ch.classList.toggle('open', el.classList.toggle('open'));
-}
+
 </script>
 </body>
 </html>
