@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SWE CS2 · Results History</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root{
+      --bg:#0a0c0f;--surface:#111418;--surface2:#181d24;--border:#1f2733;
+      --accent:#f0d000;--accent2:#00e5a0;--red:#ff3d5a;--text:#d6dce8;--muted:#6b7a90;
+      --mono:'Share Tech Mono',monospace;--display:'Barlow Condensed',sans-serif;--body:'Barlow',sans-serif;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:15px;min-height:100vh}
+    body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(240,208,0,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(240,208,0,.015) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+
+    /* ── HEADER ── */
+    header{position:sticky;top:0;z-index:100;background:rgba(10,12,15,.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:58px}
+    .logo{display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0}
+    .logo-flag{width:28px;height:20px;background:linear-gradient(180deg,#006AA7 33%,#FECC02 33%,#FECC02 66%,#006AA7 66%);border-radius:2px;position:relative;overflow:hidden}
+    .logo-flag::after{content:'';position:absolute;top:0;left:22%;width:16%;height:100%;background:#FECC02}
+    .logo-text{font-family:var(--display);font-size:22px;font-weight:800;letter-spacing:.08em;color:#fff;text-transform:uppercase}
+    .logo-text span{color:var(--accent)}
+    nav{display:flex;gap:4px}
+    nav a{font-family:var(--display);font-size:14px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-decoration:none;padding:6px 16px;border-radius:4px;border:1px solid transparent;transition:color .15s,background .15s,border-color .15s}
+    nav a:hover{color:var(--text);background:var(--surface2)}
+    nav a.active{color:var(--accent);background:rgba(240,208,0,.08);border-color:rgba(240,208,0,.25)}
+
+    /* ── MAIN ── */
+    main{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:28px 20px 60px}
+    .page-title{font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:22px;display:flex;align-items:center;gap:10px}
+    .page-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+    /* ── CONTROLS ── */
+    .controls{display:flex;gap:10px;margin-bottom:22px;flex-wrap:wrap;align-items:center}
+    .search-wrap{flex:1;min-width:180px;max-width:280px;position:relative}
+    .search-wrap::before{content:'⌕';position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:16px;pointer-events:none}
+    #search-input{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:var(--body);font-size:14px;padding:7px 12px 7px 30px;border-radius:4px;outline:none;transition:border-color .15s}
+    #search-input:focus{border-color:var(--accent)}
+    #search-input::placeholder{color:var(--muted)}
+
+    /* ── STATS BAR ── */
+    .stats-bar{display:flex;gap:1px;margin-bottom:24px;border-radius:6px;overflow:hidden;border:1px solid var(--border)}
+    .stat-item{flex:1;padding:14px 16px;background:var(--surface);text-align:center}
+    .stat-value{font-family:var(--mono);font-size:26px;color:#fff;line-height:1;margin-bottom:4px}
+    .stat-value.green{color:var(--accent2)}
+    .stat-value.yellow{color:var(--accent)}
+    .stat-value.red{color:var(--red)}
+    .stat-label{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)}
+
+    /* ── RESULT CARD ── */
+    .result-card{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:6px;margin-bottom:8px;overflow:hidden;transition:border-color .2s;animation:cardIn .25s ease both}
+    @keyframes cardIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+    .result-card:hover{border-color:rgba(240,208,0,.3)}
+    .result-card__row{display:flex;align-items:center;padding:14px 18px;gap:14px}
+    .result-date{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:48px;white-space:nowrap}
+    .result-tournament{font-family:var(--display);font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);min-width:120px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .result-teams{flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+
+    .rt{display:flex;flex-direction:column;gap:5px;flex:1;min-width:0}
+    .rt.right{align-items:flex-end}
+    .rt-namerow{display:flex;align-items:center;gap:8px}
+    .rt.right .rt-namerow{flex-direction:row-reverse}
+    .rt-logo{width:28px;height:28px;object-fit:contain;background:var(--surface2);border-radius:3px;padding:3px;flex-shrink:0}
+    .rt-logo-ph{width:28px;height:28px;background:var(--surface2);border-radius:3px;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0}
+    .rt-name{font-family:var(--display);font-size:17px;font-weight:700;letter-spacing:.03em;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .rt-name.winner{color:var(--accent2)}
+    .rt-name.loser{color:var(--muted)}
+    .rt-name.swe-hl{color:var(--accent2)}
+    .swe-pill{display:inline-flex;align-items:center;gap:4px;font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border-radius:3px;white-space:nowrap}
+    .swe-pill.full{background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.3);color:var(--accent2)}
+    .swe-pill.partial{background:rgba(240,208,0,.08);border:1px solid rgba(240,208,0,.25);color:var(--accent)}
+
+    .result-score{display:flex;flex-direction:column;align-items:center;padding:0 10px;min-width:72px}
+    .rs-main{font-family:var(--mono);font-size:22px;line-height:1}
+    .rs-label{font-family:var(--display);font-size:10px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-top:3px}
+
+    /* Map expand */
+    .result-card__maps{display:none;border-top:1px solid var(--border);background:rgba(0,0,0,.15)}
+    .result-card__maps.open{display:block}
+    .maps-grid{display:flex;flex-wrap:wrap}
+    .map-pill{flex:1;min-width:90px;padding:10px 14px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+    .map-pill:last-child{border-right:none}
+    .mp-name{font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+    .mp-score{font-family:var(--mono);font-size:20px;display:flex;gap:4px;align-items:baseline}
+    .mp-score .sep{font-size:15px;color:var(--muted)}
+    .mp-score .w{color:var(--accent2)}
+    .mp-score .l{color:var(--muted)}
+    .expand-btn{background:none;border:none;color:var(--muted);font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;padding:8px 16px;width:100%;text-align:center;border-top:1px solid var(--border);transition:color .15s,background .15s;display:flex;align-items:center;justify-content:center;gap:6px}
+    .expand-btn:hover{color:var(--text);background:rgba(255,255,255,.03)}
+    .chevron{transition:transform .2s;display:inline-block}
+    .chevron.open{transform:rotate(180deg)}
+
+    .date-group{font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);padding:20px 0 10px;display:flex;align-items:center;gap:10px}
+    .date-group::after{content:'';flex:1;height:1px;background:var(--border)}
+
+    /* States */
+    .state-card{text-align:center;padding:60px 20px;color:var(--muted)}
+    .state-card .icon{font-size:42px;margin-bottom:16px;opacity:.4}
+    .state-card h3{font-family:var(--display);font-size:20px;font-weight:700;letter-spacing:.06em;color:var(--text);margin-bottom:8px}
+    .state-card p{font-size:15px;line-height:1.6;max-width:420px;margin:0 auto}
+    .state-card a{color:var(--accent2)}
+    .spinner{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .pagination-info{font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;padding:14px 0}
+
+    @media(max-width:600px){.result-tournament{display:none}.rt-name{font-size:14px}.rs-main{font-size:18px}}
+  </style>
+</head>
+<body>
+
+<header>
+  <a class="logo" href="index.html">
+    <div class="logo-flag"></div>
+    <span class="logo-text">SWE<span>CS2</span></span>
+  </a>
+  <nav>
+    <a href="index.html">Live</a>
+    <a href="history.html" class="active">History</a>
+  </nav>
+</header>
+
+<main>
+  <div class="page-title">Results History · Swedish CS2 Tracker</div>
+
+  <div class="controls">
+    <div class="search-wrap">
+      <input id="search-input" type="text" autocomplete="off" placeholder="Search team or tournament…" oninput="onSearch(this.value)" />
+    </div>
+  </div>
+
+  <div id="stats-bar" style="display:none">
+    <div class="stats-bar">
+      <div class="stat-item"><div class="stat-value" id="stat-total">—</div><div class="stat-label">Matches</div></div>
+      <div class="stat-item"><div class="stat-value green" id="stat-wins">—</div><div class="stat-label">SWE Wins</div></div>
+      <div class="stat-item"><div class="stat-value red" id="stat-losses">—</div><div class="stat-label">SWE Losses</div></div>
+      <div class="stat-item"><div class="stat-value yellow" id="stat-winrate">—</div><div class="stat-label">Win Rate</div></div>
+    </div>
+  </div>
+
+  <div id="content">
+    <div class="state-card"><div class="spinner"></div><p>Loading match history…</p></div>
+  </div>
+</main>
+
+<script src="shared.js"></script>
+<script>
+let allMatches   = [];
+let searchQuery  = '';
+
+window.addEventListener('DOMContentLoaded', fetchHistory);
+
+async function fetchHistory() {
+  try {
+    await ensureSwedishData();
+
+    const data = await pandaFetch(
+      '/csgo/matches/past?per_page=100&sort=-end_at&include=games,opponents'
+    );
+
+    // Only keep matches with at least one Swedish team
+    allMatches = data.filter(hasSweTeam);
+
+    renderResults();
+    document.getElementById('stats-bar').style.display = 'block';
+  } catch (err) {
+    document.getElementById('content').innerHTML = `
+      <div class="state-card">
+        <div class="icon">⚠️</div>
+        <h3>Connection Error</h3>
+        <p>${err.status === undefined
+          ? 'Could not reach the server. Is your Cloudflare Worker deployed? Check the URL in shared.js.'
+          : `API error ${err.status}.`
+        }</p>
+      </div>`;
+  }
+}
+
+function onSearch(val) {
+  searchQuery = val.toLowerCase().trim();
+  renderResults();
+}
+
+function matchesSearch(match) {
+  if (!searchQuery) return true;
+  const t1   = match.opponents?.[0]?.opponent?.name?.toLowerCase()||'';
+  const t2   = match.opponents?.[1]?.opponent?.name?.toLowerCase()||'';
+  const tour = (match.tournament?.name||match.league?.name||'').toLowerCase();
+  return t1.includes(searchQuery) || t2.includes(searchQuery) || tour.includes(searchQuery);
+}
+
+function renderResults() {
+  const filtered = allMatches.filter(matchesSearch);
+
+  // Stats (only count matches where a Swedish team is a direct participant)
+  let wins = 0, losses = 0;
+  filtered.forEach(m => {
+    if (!m.winner) return;
+    const t1    = m.opponents?.[0]?.opponent;
+    const t2    = m.opponents?.[1]?.opponent;
+    const sweT  = sweInfo(t1) ? t1 : sweInfo(t2) ? t2 : null;
+    if (!sweT) return;
+    if (m.winner.id === sweT.id) wins++; else losses++;
+  });
+
+  document.getElementById('stat-total').textContent   = filtered.length;
+  document.getElementById('stat-wins').textContent    = wins;
+  document.getElementById('stat-losses').textContent  = losses;
+  const tot = wins + losses;
+  document.getElementById('stat-winrate').textContent = tot > 0 ? Math.round(wins/tot*100)+'%' : '—';
+
+  if (!filtered.length) {
+    document.getElementById('content').innerHTML = `
+      <div class="state-card">
+        <div class="icon">📂</div>
+        <h3>No Results Found</h3>
+        <p>${searchQuery ? `No matches for "${searchQuery}".` : 'No Swedish matches in the last 100 results.'}</p>
+      </div>`;
+    return;
+  }
+
+  // Group by calendar date
+  const groups = {};
+  filtered.forEach(m => {
+    const d   = m.end_at ? new Date(m.end_at) : new Date(m.begin_at);
+    const key = d.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(m);
+  });
+
+  let html = '';
+  Object.entries(groups).forEach(([date, matches], gi) => {
+    html += `<div class="date-group">${date}</div>`;
+    matches.forEach((m, i) => { html += renderResultCard(m, gi*100 + i*40); });
+  });
+  html += `<div class="pagination-info">Showing ${filtered.length} Swedish matches</div>`;
+  document.getElementById('content').innerHTML = html;
+}
+
+function renderResultCard(match, delay) {
+  const t1    = match.opponents?.[0]?.opponent;
+  const t2    = match.opponents?.[1]?.opponent;
+  const t1swe = sweInfo(t1);
+  const t2swe = sweInfo(t2);
+
+  const { t1Maps, t2Maps } = extractMapScore(match);
+  const t1Win  = match.winner?.id === t1?.id;
+  const t2Win  = match.winner?.id === t2?.id;
+
+  const d          = match.end_at ? new Date(match.end_at) : new Date(match.begin_at);
+  const timeStr    = d.toLocaleTimeString('sv-SE', { hour:'2-digit', minute:'2-digit' });
+  const tournament = match.tournament?.name || match.league?.name || 'CS2';
+  const bo         = match.number_of_games ? `BO${match.number_of_games}` : '';
+  const cardId     = 'rc-' + match.id;
+
+  // Logo helper using shared.js teamLogo but with rt-logo class
+  const logo = t => t?.image_url
+    ? `<img class="rt-logo" src="${t.image_url}" alt="${t.name||''}" onerror="this.style.display='none'" />`
+    : `<div class="rt-logo-ph">${(t?.name||'?')[0].toUpperCase()}</div>`;
+
+  // Map breakdown (expandable)
+  const games = (match.games||[]).filter(g => g.status !== 'not_started' && g.status !== 'canceled');
+  let mapsHtml = '';
+  if (games.length) {
+    const mapItems = games.map(g => {
+      const mn = (g.map?.name||'?').replace('de_','').replace('cs_','').toUpperCase();
+      let r1=0, r2=0;
+      (g.results||[]).forEach(r => {
+        if (r.team_id===t1?.id) r1=r.score;
+        else if (r.team_id===t2?.id) r2=r.score;
+      });
+      // fallback to winner flag if results missing
+      if (r1===0 && r2===0 && g.winner) {
+        if (g.winner.id===t1?.id) r1=1; else r2=1;
+      }
+      return `<div class="map-pill">
+        <div class="mp-name">${mn}</div>
+        <div class="mp-score">
+          <span class="${r1>r2?'w':'l'}">${r1}</span>
+          <span class="sep">:</span>
+          <span class="${r2>r1?'w':'l'}">${r2}</span>
+        </div>
+      </div>`;
+    }).join('');
+
+    mapsHtml = `
+      <div class="result-card__maps" id="${cardId}-maps">
+        <div class="maps-grid">${mapItems}</div>
+      </div>
+      <button class="expand-btn" onclick="toggleMaps('${cardId}')">
+        <span>MAP SCORES (${games.length})</span>
+        <span class="chevron" id="${cardId}-chev">▾</span>
+      </button>`;
+  }
+
+  const t1Class = ['rt-name', t1swe?'swe-hl':(t1Win?'winner':t2Win?'loser':'')].filter(Boolean).join(' ');
+  const t2Class = ['rt-name', t2swe?'swe-hl':(t2Win?'winner':t1Win?'loser':'')].filter(Boolean).join(' ');
+
+  return `
+  <div class="result-card" style="animation-delay:${delay}ms" id="${cardId}">
+    <div class="result-card__row">
+      <div class="result-date">${timeStr}</div>
+      <div class="result-tournament" title="${tournament}">${tournament}</div>
+      <div class="result-teams">
+        <div class="rt">
+          <div class="rt-namerow">${logo(t1)}<span class="${t1Class}">${t1?.name||'TBD'}</span></div>
+          ${swePill(t1swe)}
+        </div>
+        <div class="result-score">
+          <div class="rs-main">
+            <span style="color:${t1Win?'var(--accent2)':t2Win?'var(--muted)':'#fff'}">${t1Maps}</span>
+            <span style="color:var(--muted)">:</span>
+            <span style="color:${t2Win?'var(--accent2)':t1Win?'var(--muted)':'#fff'}">${t2Maps}</span>
+          </div>
+          <div class="rs-label">${bo}</div>
+        </div>
+        <div class="rt right">
+          <div class="rt-namerow">${logo(t2)}<span class="${t2Class}">${t2?.name||'TBD'}</span></div>
+          ${swePill(t2swe,'right')}
+        </div>
+      </div>
+    </div>
+    ${mapsHtml}
+  </div>`;
+}
+
+function toggleMaps(id) {
+  const el = document.getElementById(id+'-maps');
+  const ch = document.getElementById(id+'-chev');
+  if (!el) return;
+  ch.classList.toggle('open', el.classList.toggle('open'));
+}
+</script>
+</body>
+</html>
