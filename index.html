@@ -165,32 +165,12 @@ async function fetchMatches() {
   try {
     await ensureSwedishData();
 
-    // Fetch matches, upcoming, and live games (round scores) in parallel.
-    // /csgo/games/running is the only endpoint with real-time round scores.
-    // We merge games into matches by match_id — no individual match ID calls needed.
-    const [runningList, upcomingList, liveGames] = await Promise.all([
-      pandaFetch('/csgo/matches/running?per_page=50&include=opponents,picks_bans'),
+    const [runningList, upcomingList] = await Promise.all([
+      pandaFetch('/csgo/matches/running?per_page=50&include=opponents,games,picks_bans'),
       pandaFetch('/csgo/matches/upcoming?per_page=30&sort=begin_at&include=opponents'),
-      pandaFetch('/csgo/games/running?per_page=50'),
     ]);
 
-    // Build a map: match_id → [games] from the live games endpoint
-    const gamesByMatch = {};
-    liveGames.forEach(g => {
-      const mid = g.match_id;
-      if (!mid) return;
-      if (!gamesByMatch[mid]) gamesByMatch[mid] = [];
-      gamesByMatch[mid].push(g);
-    });
-
-    // Merge live game data into each running match
-    const sweRunning = runningList
-      .filter(hasSweTeam)
-      .map(m => ({
-        ...m,
-        games: gamesByMatch[m.id] || m.games || [],
-      }));
-
+    const sweRunning     = runningList.filter(hasSweTeam);
     const sweUpcomingRaw = upcomingList.filter(hasSweTeam);
 
     const scoreKey = buildScoreKey(sweRunning);
