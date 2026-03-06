@@ -209,7 +209,7 @@ async function fetchMatches() {
         <h3>Connection Error</h3>
         <p>${err.status === 401 ? 'API key rejected — check GRID_TOKEN in Cloudflare.'
            : err.status === 403 ? 'Access denied — check your GRID plan.'
-           : err.status ? \`API error \${err.status}.\`
+           : err.status ? 'API error ' + err.status + '.'
            : 'Could not reach the Worker. Check the URL in shared.js.'}</p>
       </div>`;
     schedulePoll(INTERVAL_IDLE);
