@@ -50,7 +50,7 @@ async function ensureSwedishData() {
   if (_sweLoaded) return;
 
   // Try cache first (1 hour TTL)
-  const cached = cacheGet('swe_players', 60 * 60 * 1000);
+  const cached = cacheGet('swe_players', 6 * 60 * 60 * 1000);
   if (cached) { _sweTeamData = cached; _sweLoaded = true; return; }
 
   try {
@@ -204,11 +204,35 @@ function swePill(info, align = 'left') {
   return `<span class="swe-pill ${cls}" style="${align==='right'?'align-self:flex-end':''}">${text}</span>`;
 }
 
+// ── LOGO CACHE ────────────────────────────────────────────────────────────
+// Persists team logo URLs in localStorage so images never need re-fetching info
+const _logoCacheKey = 'swe_logos';
+let _logoCache = null;
+function _getLogoCache() {
+  if (_logoCache) return _logoCache;
+  try { _logoCache = JSON.parse(localStorage.getItem(_logoCacheKey) || '{}'); }
+  catch(_) { _logoCache = {}; }
+  return _logoCache;
+}
+function _saveLogoCache() {
+  try { localStorage.setItem(_logoCacheKey, JSON.stringify(_logoCache)); } catch(_) {}
+}
+function cacheLogoFromTeam(t) {
+  if (!t?.id) return;
+  const url = t.image_url || t.logoUrl;
+  if (!url) return;
+  const cache = _getLogoCache();
+  if (cache[t.id] !== url) { cache[t.id] = url; _saveLogoCache(); }
+}
+
 function teamLogo(t, cls = 'team-logo') {
-  const url  = t?.image_url || t?.logoUrl;
-  const name = t?.name || '?';
+  const cache = _getLogoCache();
+  const url   = t?.image_url || t?.logoUrl || (t?.id && cache[t.id]) || null;
+  const name  = t?.name || '?';
+  // Save to cache whenever we have a fresh url from API
+  if (t?.id && (t.image_url || t.logoUrl)) cacheLogoFromTeam(t);
   if (url)
-    return `<img class="${cls}" src="${url}" alt="${name}" onerror="this.style.display='none'" />`;
+    return `<img class="${cls}" src="${url}" alt="${name}" loading="lazy" onerror="this.style.display='none'" />`;
   return `<div class="${cls}-ph">${name[0].toUpperCase()}</div>`;
 }
 

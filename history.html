@@ -203,8 +203,6 @@ async function fetchAndMerge() {
     const today     = new Date().toISOString().split('T')[0];
     const storedIds = new Set(allMatches.map(m => m.id));
 
-    // Only fetch for teams with 3+ Swedish players — these are the teams
-    // we actually care about, and keeps API calls to ~10-15 max.
     const sweTeamIds = Object.entries(_sweTeamData)
       .filter(([, d]) => d.count >= 3)
       .map(([id]) => id);
@@ -212,37 +210,43 @@ async function fetchAndMerge() {
     const byId = {};
     allMatches.forEach(m => { byId[m.id] = m; });
 
-    // One request per team — single filter[opponent_id] param, always works.
-    // Run them sequentially to avoid hammering the API.
-    for (const teamId of sweTeamIds) {
-      try {
-        let page = 1;
-        while (true) {
-          const batch = await pandaFetch(
-            `/csgo/matches/past?per_page=50&sort=-end_at&page=${page}` +
-            `&include=opponents,results` +
-            `&range[end_at]=${yearStart},${today}` +
-            `&filter[opponent_id]=${teamId}`
-          );
-          if (!batch.length) break;
-          batch.forEach(m => { byId[m.id] = m; });
-          // Stop if all matches on this page were already stored
-          if (batch.every(m => storedIds.has(m.id)) || batch.length < 50) break;
-          page++;
-          if (page > 5) break; // 250 matches per team is plenty
-        }
-      } catch(e) {
-        console.warn('[SWE History] Team', teamId, 'failed:', e);
+    // Fetch all pages for a single team, returns merged match map entries
+    async function fetchTeam(teamId) {
+      let page = 1;
+      while (true) {
+        const batch = await pandaFetch(
+          `/csgo/matches/past?per_page=50&sort=-end_at&page=${page}` +
+          `&include=opponents,results` +
+          `&range[end_at]=${yearStart},${today}` +
+          `&filter[opponent_id]=${teamId}`
+        );
+        if (!batch.length) break;
+        // Cache any logos we see
+        batch.forEach(m => {
+          m.opponents?.forEach(o => cacheLogoFromTeam(o?.opponent));
+        });
+        batch.forEach(m => { byId[m.id] = m; });
+        if (batch.every(m => storedIds.has(m.id)) || batch.length < 50) break;
+        page++;
+        if (page > 5) break;
       }
     }
 
-    allMatches = Object.values(byId)
-      .filter(hasSweTeam)
-      .sort((a, b) => new Date(b.end_at || b.begin_at) - new Date(a.end_at || a.begin_at));
+    // Run 5 team fetches concurrently — much faster than sequential,
+    // without hammering the API.
+    const CONCURRENCY = 5;
+    for (let i = 0; i < sweTeamIds.length; i += CONCURRENCY) {
+      const chunk = sweTeamIds.slice(i, i + CONCURRENCY);
+      await Promise.allSettled(chunk.map(id => fetchTeam(id)));
+      // Re-render after each wave so results appear progressively
+      allMatches = Object.values(byId)
+        .filter(hasSweTeam)
+        .sort((a, b) => new Date(b.end_at || b.begin_at) - new Date(a.end_at || a.begin_at));
+      document.getElementById('stats-section').style.display = 'flex';
+      renderResults();
+    }
 
     saveHistory(allMatches);
-    document.getElementById('stats-section').style.display = 'flex';
-    renderResults();
 
   } catch(err) {
     console.error('[SWE History] Fetch error:', err);
