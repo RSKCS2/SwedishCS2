@@ -55,12 +55,7 @@ const QUERY_LIVE_SERIES = `
             baseInfo { id name logoUrl }
             scoreAdvantage
           }
-          games {
-            id
-            sequenceNumber
-            started
-            finished
-          }
+
         }
       }
     }
