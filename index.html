@@ -163,10 +163,8 @@ window.addEventListener('DOMContentLoaded', () => { fetchMatches(); });
 
 async function fetchMatches() {
   try {
-    const now  = new Date();
-    const from = now.toISOString();
-    const to   = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    const data = await gridFetch('/central', QUERY_LIVE_SERIES, { from, to });
+    const to   = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const data = await gridFetch('/central', QUERY_LIVE_SERIES, { to });
     const allSeries = data.allSeries.edges.map(e => e.node);
     const sweSeries   = allSeries.filter(s => s.teams?.some(t => isSwedishTeam(t.baseInfo?.name)) && s.started && !s.finished);
     const sweUpcoming = allSeries.filter(s => s.teams?.some(t => isSwedishTeam(t.baseInfo?.name)) && !s.started);
