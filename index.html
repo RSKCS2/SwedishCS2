@@ -168,8 +168,8 @@ async function fetchMatches() {
     const lte = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
     const data = await gridFetch('/central', QUERY_LIVE_SERIES, { gte, lte });
     const allSeries = data.allSeries.edges.map(e => e.node);
-    console.log('[GRID] All series titles:', [...new Set(allSeries.map(s => s.title?.nameShortened))]);
-    console.log('[GRID] All teams:', [...new Set(allSeries.flatMap(s => s.teams?.map(t => t.baseInfo?.name) || []))]);
+    const cs2Series = allSeries.filter(s => s.title?.nameShortened === 'cs2');
+    console.log('[GRID] CS2 teams:', [...new Set(cs2Series.flatMap(s => s.teams?.map(t => t.baseInfo?.name) || []))].sort().join(', '));
     const isSwe       = s => s.teams?.some(t => isSwedishTeam(t.baseInfo?.name));
     const nowMs = Date.now();
     const sweSeries   = allSeries.filter(s => isSwe(s) && new Date(s.startTimeScheduled).getTime() <= nowMs);
