@@ -1,9 +1,8 @@
 /**
- * shared.js — GRID API helpers shared by index.html and history.html
+ * shared.js — GRID API helpers for SWE CS2 Tracker
  */
 const WORKER_URL = 'https://floral-moon-0400.epicminecraftboy12.workers.dev';
 
-// ── GRID GraphQL fetch ────────────────────────────────────────────────────
 async function gridFetch(endpoint, query, variables = {}) {
   const res = await fetch(WORKER_URL + endpoint, {
     method:  'POST',
@@ -19,53 +18,43 @@ async function gridFetch(endpoint, query, variables = {}) {
   return json.data;
 }
 
-// ── SWEDISH TEAM LIST ─────────────────────────────────────────────────────
-// Add or remove teams here as the Swedish scene changes.
-const SWEDISH_TEAM_NAMES = new Set([
-  'ninjas in pyjamas', 'nip',
-  'fnatic',
-  'eyeballers',
-  'lilmix',
-  'godsent',
-  'alliance',
-  'team finest',
-  'anonymo esports', 'anonymo',
-  'sashi esport', 'sashi',
-  'havu gaming', 'havu',
-  'wolves esports',
+// ── SWEDISH TEAM DETECTION ────────────────────────────────────────────────
+const SWEDISH_TEAMS = new Set([
+  'ninjas in pyjamas', 'nip', 'fnatic', 'eyeballers', 'lilmix',
+  'godsent', 'alliance', 'team finest', 'anonymo esports', 'anonymo',
+  'sashi esport', 'sashi', 'havu gaming', 'havu', 'wolves esports',
   'nordic esports',
 ]);
 
-function isSwedishTeam(teamName) {
-  if (!teamName) return false;
-  return SWEDISH_TEAM_NAMES.has(teamName.toLowerCase().trim());
-}
-
-function hasSweTeam(series) {
-  return series.teams?.some(t => isSwedishTeam(t.baseInfo?.name));
-}
-
-function sweInfo(teamName) {
-  return isSwedishTeam(teamName) ? { isFull: true } : null;
+function isSwedishTeam(name) {
+  return !!name && SWEDISH_TEAMS.has(name.toLowerCase().trim());
 }
 
 // ── GRAPHQL QUERIES ───────────────────────────────────────────────────────
+// Correct field names per GRID docs:
+//   teams.scoreAdvantage  (not score)
+//   format.nameShortened  (not type/bestOf)
+//   orderBy: StartTimeScheduled  (plain enum)
+//   filter.startTimeScheduled: { gte, lte }  (date range)
+
 const QUERY_LIVE_SERIES = `
-  query LiveAndUpcoming {
+  query LiveAndUpcoming($gte: String!, $lte: String!) {
     allSeries(
-      filter: { titleId: 3 }
-      first: 50
+      filter: { startTimeScheduled: { gte: $gte, lte: $lte } }
+      orderBy: StartTimeScheduled
+      first: 100
     ) {
       edges {
         node {
           id
           startTimeScheduled
+          title { nameShortened }
           tournament { id name }
+          format { nameShortened }
           teams {
             baseInfo { id name logoUrl }
-            score
+            scoreAdvantage
           }
-          format { bestOf }
           games {
             id
             sequenceNumber
@@ -78,23 +67,22 @@ const QUERY_LIVE_SERIES = `
   }
 `;
 
-// NOTE: titleId 3 is CS2 on GRID. If matches aren't showing, check your
-// GRID data portal for the correct titleId and update the query above.
-
 const QUERY_SERIES_STATE = `
   query SeriesState($id: ID!) {
     seriesState(id: $id) {
       id
       started
       finished
-      teams { id score }
+      teams {
+        name
+        won
+      }
       games {
         sequenceNumber
         started
         finished
         teams {
-          id
-          side
+          name
           score
         }
       }
@@ -103,23 +91,24 @@ const QUERY_SERIES_STATE = `
 `;
 
 const QUERY_PAST_SERIES = `
-  query PastSeries($page: Int) {
+  query PastSeries($gte: String!, $lte: String!) {
     allSeries(
-      filter: { titleIds: [3], status: [FINISHED] }
-      first: 50
-      page: $page
+      filter: { startTimeScheduled: { gte: $gte, lte: $lte } }
+      orderBy: StartTimeScheduled
+      first: 100
     ) {
       totalCount
       edges {
         node {
           id
           startTimeScheduled
+          title { nameShortened }
           tournament { id name }
+          format { nameShortened }
           teams {
             baseInfo { id name logoUrl }
-            score
+            scoreAdvantage
           }
-          format { bestOf }
           games {
             id
             sequenceNumber
@@ -135,12 +124,12 @@ const QUERY_PAST_SERIES = `
 // ── UI HELPERS ────────────────────────────────────────────────────────────
 function swePill(isSwe, align = 'left') {
   if (!isSwe) return '';
-  return `<span class="swe-pill full" style="${align==='right'?'align-self:flex-end':''}">🇸🇪 Swedish</span>`;
+  return `<span class="swe-pill full" style="${align === 'right' ? 'align-self:flex-end' : ''}">🇸🇪 Swedish</span>`;
 }
 
 function teamLogo(team, cls = 'team-logo') {
-  const url  = team?.logoUrl || team?.baseInfo?.logoUrl;
-  const name = team?.name    || team?.baseInfo?.name || '?';
+  const url  = team?.logoUrl;
+  const name = team?.name || '?';
   if (url)
     return `<img class="${cls}" src="${url}" alt="${name}" onerror="this.style.display='none'" />`;
   return `<div class="${cls}-ph">${name[0].toUpperCase()}</div>`;
@@ -152,6 +141,6 @@ function formatMapName(raw) {
 }
 
 function seriesFormat(series) {
-  const n = series.format?.bestOf;
-  return n ? `BO${n}` : 'BO?';
+  const n = series.format?.nameShortened || '';
+  return n || 'BO?';
 }

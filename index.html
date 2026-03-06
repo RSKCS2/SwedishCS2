@@ -163,14 +163,15 @@ window.addEventListener('DOMContentLoaded', () => { fetchMatches(); });
 
 async function fetchMatches() {
   try {
-    const data = await gridFetch('/central', QUERY_LIVE_SERIES);
-    const allSeries   = data.allSeries.edges.map(e => e.node)
-      .sort((a, b) => new Date(a.startTimeScheduled) - new Date(b.startTimeScheduled));
+    const now = new Date();
+    const gte = new Date(now - 2 * 60 * 60 * 1000).toISOString();
+    const lte = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const data = await gridFetch('/central', QUERY_LIVE_SERIES, { gte, lte });
+    const allSeries = data.allSeries.edges.map(e => e.node)
+      .filter(s => s.title?.nameShortened?.toLowerCase().includes('cs'));
     const isSwe       = s => s.teams?.some(t => isSwedishTeam(t.baseInfo?.name));
-    const sweSeries   = allSeries.filter(s => isSwe(s) && s.started && !s.finished);
-    const cutoff = Date.now() + 7 * 24 * 60 * 60 * 1000;
-    const sweUpcoming = allSeries.filter(s => isSwe(s) && !s.started && !s.finished
-      && new Date(s.startTimeScheduled).getTime() <= cutoff);
+    const sweSeries   = allSeries.filter(s => isSwe(s) && s.games?.some(g => g.started && !g.finished));
+    const sweUpcoming = allSeries.filter(s => isSwe(s) && !s.games?.some(g => g.started));
 
     // For each live Swedish series, fetch live round scores (Series State)
     // Series State API is limited to 10 req/min — fine for small number of live matches
@@ -267,9 +268,9 @@ function renderCard(series, live, delay) {
   const t1Swe  = isSwedishTeam(t1Name);
   const t2Swe  = isSwedishTeam(t2Name);
 
-  // Map score (how many maps each team won in the series)
-  const t1Maps = t1?.score ?? 0;
-  const t2Maps = t2?.score ?? 0;
+  // scoreAdvantage = maps won advantage; derive actual map scores from games
+  const t1Maps = t1?.scoreAdvantage ?? 0;
+  const t2Maps = t2?.scoreAdvantage ?? 0;
   const finished = series.finished;
   const t1Win    = finished && t1Maps > t2Maps;
   const t2Win    = finished && t2Maps > t1Maps;
