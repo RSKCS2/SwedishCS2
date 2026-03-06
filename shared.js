@@ -55,7 +55,7 @@ const QUERY_LIVE_SERIES = `
     allSeries(
       filter: { titleId: 3 }
       first: 50
-      orderBy: { field: SCHEDULED_START_TIME, order: ASC }
+      orderBy: SCHEDULED_START_TIME_ASC
     ) {
       edges {
         node {
