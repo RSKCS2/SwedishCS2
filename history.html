@@ -15,15 +15,15 @@
     }
     *{box-sizing:border-box;margin:0;padding:0}
     body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:15px;min-height:100vh}
-    body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(240,208,0,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(240,208,0,.015) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+    body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(240,208,0,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(240,208,0,.015) 1px,transparent 1px);background-size:20px 20px;pointer-events:none;z-index:0}
 
     /* ── HEADER ── */
-    header{position:sticky;top:0;z-index:100;background:rgba(10,12,15,.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 24px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;height:58px}
+    header{position:sticky;top:0;z-index:100;background:rgba(10,12,15,.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 24px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;height:56px}
     .logo{display:flex;align-items:center;gap:10px;text-decoration:none}
     .logo-text{font-family:var(--display);font-size:22px;font-weight:800;letter-spacing:.08em;color:#fff;text-transform:uppercase}
     .logo-text span{color:var(--accent)}
     nav{display:flex;gap:4px;justify-content:center}
-    nav a{font-family:var(--display);font-size:14px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-decoration:none;padding:6px 16px;border-radius:4px;border:1px solid transparent;transition:color .15s,background .15s,border-color .15s}
+    nav a{font-family:var(--display);font-size:14px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-decoration:none;padding:6px 16px;border-radius:4px;border:1px solid transparent;transition:.2s}
     nav a:hover{color:var(--text);background:var(--surface2)}
     nav a.active{color:var(--accent);background:rgba(240,208,0,.08);border-color:rgba(240,208,0,.25)}
     .header-spacer{display:flex;justify-content:flex-end}
@@ -37,7 +37,7 @@
     .controls{display:flex;gap:10px;margin-bottom:22px;flex-wrap:wrap;align-items:center}
     .search-wrap{flex:1;min-width:180px;max-width:280px;position:relative}
     .search-wrap::before{content:'⌕';position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:16px;pointer-events:none}
-    #search-input{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:var(--body);font-size:14px;padding:7px 12px 7px 30px;border-radius:4px;outline:none;transition:border-color .15s}
+    #search-input{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:var(--body);font-size:14px;padding:7px 12px 7px 30px;border-radius:4px;outline:none;transition:.2s}
     #search-input:focus{border-color:var(--accent)}
     #search-input::placeholder{color:var(--muted)}
 
@@ -45,7 +45,7 @@
     .stats-section{margin-bottom:24px;display:flex;flex-direction:column;gap:10px}
 
     .period-tabs{display:flex;gap:4px;flex-wrap:wrap}
-    .period-tab{font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:5px 14px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:all .15s}
+    .period-tab{font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:5px 14px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;transition:.2s}
     .period-tab:hover{color:var(--text);border-color:var(--text)}
     .period-tab.active{color:var(--accent);background:rgba(240,208,0,.08);border-color:rgba(240,208,0,.25)}
 
@@ -58,7 +58,7 @@
     .stat-label{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)}
 
     /* ── RESULT CARD ── */
-    .result-card{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:6px;margin-bottom:8px;overflow:hidden;transition:border-color .2s;animation:cardIn .25s ease both}
+    .result-card{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:6px;margin-bottom:8px;overflow:hidden;transition:border-color .2s;animation:cardIn .4s ease-out forwards}
     @keyframes cardIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
     .result-card:hover{border-color:rgba(240,208,0,.3)}
     .result-card__row{display:flex;align-items:center;padding:14px 18px;gap:14px}
@@ -76,7 +76,7 @@
     .rt-name.winner{color:var(--accent2)}
     .rt-name.loser{color:var(--muted)}
     .rt-name.swe-hl{color:var(--accent2)}
-    .swe-pill{display:inline-flex;align-items:center;gap:4px;font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border-radius:3px;white-space:nowrap}
+    .swe-pill{display:inline-flex;align-items:center;gap:4px;font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border-radius:3px;border:1px solid;white-space:nowrap}
     .swe-pill.full{background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.3);color:var(--accent2)}
     .swe-pill.majority{background:rgba(100,149,237,.1);border:1px solid rgba(100,149,237,.3);color:#7aabff}
     .swe-pill.partial{background:rgba(240,208,0,.08);border:1px solid rgba(240,208,0,.25);color:var(--accent)}
@@ -101,7 +101,7 @@
     @keyframes spin{to{transform:rotate(360deg)}}
     .pagination-info{font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;padding:14px 0}
     .pagination-controls{display:flex;align-items:center;justify-content:center;gap:16px;padding:20px 0}
-    .page-btn{font-family:var(--display);font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 18px;border-radius:4px;cursor:pointer;transition:all .15s}
+    .page-btn{font-family:var(--display);font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 16px;border-radius:4px;cursor:pointer;transition:.2s}
     .page-btn:hover{border-color:var(--accent);color:var(--accent)}
     .page-info{font-family:var(--mono);font-size:12px;color:var(--muted)}
 
@@ -122,7 +122,7 @@
 
 <header>
   <a class="logo" href="./">
-    <svg class="logo-flag" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="28" height="28"><rect width="32" height="32" rx="6" fill="#004B87"/><rect y="12" width="32" height="8" fill="#FFC200"/><rect x="11" width="8" height="32" fill="#FFC200"/></svg>
+    <svg class="logo-flag" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="28" height="28"><rect width="32" height="32" rx="6" fill="#004B87"/><rect y="12" width="32" height="8" fill="#FFD700"/><rect x="12" width="8" height="32" fill="#FFD700"/></svg>
     <span class="logo-text">SWE<span>CS2</span></span>
   </a>
   <nav>
@@ -214,37 +214,37 @@ async function fetchAndMerge() {
   try {
     await ensureSwedishData();
 
-    const yearStart  = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
-    const today      = new Date().toISOString().split('T')[0];
     const countBefore = allMatches.length;
-    const storedIds  = new Set(allMatches.map(m => m.id));
-
-    const sweTeamIds = Object.keys(_sweTeamData);
 
     const byId = {};
     allMatches.forEach(m => { byId[m.id] = m; });
 
-    async function fetchTeam(teamId) {
-      let page = 1;
-      while (true) {
-        const batch = await pandaFetch(
-          `/csgo/matches/past?per_page=50&sort=-end_at&page=${page}` +
-          `&include=opponents,results` +
-          `&range[end_at]=${yearStart},${today}` +
-          `&filter[opponent_id]=${teamId}`
-        );
+    // Fetch merged history directly from Worker KV via /csgo/matches/past
+    // The Worker now returns the full merged dataset, paginated by page param
+    let page = 1;
+    while (true) {
+      try {
+        const batch = await pandaFetch(`/csgo/matches/past?per_page=100&page=${page}`);
         if (!batch.length) break;
+        
         batch.forEach(m => {
-          m.opponents?.forEach(o => cacheLogoFromTeam(o?.opponent));
-          byId[m.id] = m;
+          // Only include matches from this year
+          const matchDate = new Date(m.end_at || m.begin_at);
+          const yearStart_ = new Date(new Date().getFullYear(), 0, 1);
+          if (matchDate >= yearStart_) {
+            m.opponents?.forEach(o => cacheLogoFromTeam(o?.opponent));
+            byId[m.id] = m;
+          }
         });
-        if (batch.every(m => storedIds.has(m.id)) || batch.length < 50) break;
+        
+        if (batch.length < 100) break;  // Got fewer than requested = last page
         page++;
-        if (page > 5) break;
+        if (page > 100) break;  // Safety limit
+      } catch (err) {
+        console.error(`[SWE History] Error fetching page ${page}:`, err);
+        break;
       }
     }
-
-    await Promise.allSettled(sweTeamIds.map(id => fetchTeam(id)));
 
     const merged = Object.values(byId)
       .filter(hasSweTeam)
@@ -252,8 +252,7 @@ async function fetchAndMerge() {
 
     localStorage.setItem(HISTORY_FETCH_KEY, String(Date.now()));
 
-    // Only re-render if we actually got new matches — avoids nuking the DOM
-    // (and killing in-flight image requests) when nothing changed.
+    // Only re-render if we actually got new matches
     if (merged.length !== countBefore) {
       allMatches = merged;
       // Save lean version — strip image_url, teamLogo() reads from swe_logos cache
@@ -443,7 +442,6 @@ function renderResultCard(match, delay) {
     </div>
   </div>`;
 }
-
 
 </script>
 </body>
