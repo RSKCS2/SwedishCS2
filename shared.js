@@ -24,7 +24,9 @@ function cacheGet(key, maxAgeMs) {
 
 // ── PANDASCORE REST ───────────────────────────────────────────────────────
 async function pandaFetch(path) {
-  const res = await fetch(WORKER_URL + path);
+  const res = await fetch(WORKER_URL + path, {
+    headers: { 'X-Worker-Secret': WORKER_SECRET },
+  });
   if (!res.ok) throw Object.assign(new Error('PandaScore error'), { status: res.status });
   return res.json();
 }
@@ -33,7 +35,7 @@ async function pandaFetch(path) {
 async function gridFetch(endpoint, query, variables = {}) {
   const res = await fetch(WORKER_URL + endpoint, {
     method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
     body:    JSON.stringify({ query, variables }),
   });
   if (!res.ok) throw Object.assign(new Error('GRID error'), { status: res.status });
