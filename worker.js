@@ -84,7 +84,7 @@ function isAuthorized(request, env) {
   return true;
 }
 
-// ──────────────────────────���──────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
 // SCHEDULED HANDLER — Fetches and caches everything
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -277,167 +277,176 @@ async function mergeHistoryData(existing, newMatches) {
   return Array.from(existingMap.values());
 }
 
-export default {
-  async scheduled(event, env) {
-    try {
-      console.log('Scheduled handler triggered');
+async function handleScheduled(env) {
+  try {
+    console.log('Scheduled handler triggered');
 
-      // ─── LIVE DATA (every run) ───────────────────────────────────────
-      console.log('Fetching live data...');
+    // ─── LIVE DATA (every run) ───────────────────────────────────────
+    console.log('Fetching live data...');
 
-      // Fetch Swedish players
-      const players = await fetchSwedishPlayers(env.PANDASCORE_TOKEN);
-      const swedishTeamIds = new Set();
-      for (const player of players) {
-        if (player.current_team?.id) swedishTeamIds.add(player.current_team.id);
-      }
-
-      // Fetch running and upcoming matches
-      let runningMatches = await fetchRunningMatches(env.PANDASCORE_TOKEN);
-      runningMatches = runningMatches.filter(m => isSwedishTeam(m, Array.from(swedishTeamIds)));
-
-      // Attach GRID state to running matches
-      runningMatches = await attachGridStateToRunningMatches(
-        runningMatches,
-        Array.from(swedishTeamIds),
-        env.GRID_TOKEN
-      );
-
-      let upcomingMatches = await fetchUpcomingMatches(env.PANDASCORE_TOKEN);
-      upcomingMatches = upcomingMatches.filter(m => isSwedishTeam(m, Array.from(swedishTeamIds)));
-
-      // Store live data
-      const liveData = {
-        timestamp: new Date().toISOString(),
-        players,
-        running_matches: runningMatches,
-        upcoming_matches: upcomingMatches,
-      };
-
-      await env.MATCH_DATA.put(KV_LIVE_DATA, JSON.stringify(liveData));
-      console.log('Live data updated');
-
-      // ─── HISTORY DATA (one team per run) ─────────────────────────────
-      console.log('Fetching history data...');
-
-      const rotation = await rotateHistoryTeam(env);
-      if (rotation) {
-        console.log(`Fetching history for team ${rotation.teamId} (cursor: ${rotation.cursor})`);
-        
-        const newMatches = await fetchSwedishTeamMatches(rotation.teamId, env.PANDASCORE_TOKEN);
-        
-        // Merge with existing history
-        const existingHistoryJson = await env.MATCH_DATA.get(KV_HISTORY_DATA);
-        const existingHistory = existingHistoryJson ? JSON.parse(existingHistoryJson) : [];
-        
-        const mergedHistory = await mergeHistoryData(existingHistory, newMatches);
-        await env.MATCH_DATA.put(KV_HISTORY_DATA, JSON.stringify(mergedHistory));
-        
-        console.log(`History updated: ${mergedHistory.length} total matches`);
-      }
-
-      console.log('Scheduled handler completed');
-    } catch (err) {
-      console.error(`Scheduled handler error: ${err.message}`);
-      // Do NOT clear KV data on error — let the last good data persist
-    }
-  },
-
-  async fetch(request, env) {
-    const origin = request.headers.get('Origin') || '';
-    const url    = new URL(request.url);
-    const path   = url.pathname;
-
-    if (request.method === 'OPTIONS')
-      return new Response(null, { status: 204, headers: corsHeaders(origin) });
-
-    // Reject unauthorized requests early
-    if (!isAuthorized(request, env)) {
-      return new Response('Unauthorized', { status: 401, headers: corsHeaders(origin) });
+    // Fetch Swedish players
+    const players = await fetchSwedishPlayers(env.PANDASCORE_TOKEN);
+    const swedishTeamIds = new Set();
+    for (const player of players) {
+      if (player.current_team?.id) swedishTeamIds.add(player.current_team.id);
     }
 
-    // ─── GRID POST (read from KV) ────────────────────────────────────
-    if (request.method === 'POST') {
-      if (path === '/central' || path === '/live') {
-        // Both /central and /live now serve from KV live_data
-        const liveDataJson = await env.MATCH_DATA.get(KV_LIVE_DATA);
-        if (!liveDataJson) {
-          return new Response(
-            JSON.stringify({ error: 'No live data cached' }),
-            { status: 503, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } }
-          );
-        }
-        return new Response(liveDataJson, {
-          status: 200,
-          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
-        });
-      }
-      return new Response('Not found', { status: 404 });
+    // Fetch running and upcoming matches
+    let runningMatches = await fetchRunningMatches(env.PANDASCORE_TOKEN);
+    runningMatches = runningMatches.filter(m => isSwedishTeam(m, Array.from(swedishTeamIds)));
+
+    // Attach GRID state to running matches
+    runningMatches = await attachGridStateToRunningMatches(
+      runningMatches,
+      Array.from(swedishTeamIds),
+      env.GRID_TOKEN
+    );
+
+    let upcomingMatches = await fetchUpcomingMatches(env.PANDASCORE_TOKEN);
+    upcomingMatches = upcomingMatches.filter(m => isSwedishTeam(m, Array.from(swedishTeamIds)));
+
+    // Store live data
+    const liveData = {
+      timestamp: new Date().toISOString(),
+      players,
+      running_matches: runningMatches,
+      upcoming_matches: upcomingMatches,
+    };
+
+    await env.MATCH_DATA.put(KV_LIVE_DATA, JSON.stringify(liveData));
+    console.log('Live data updated');
+
+    // ─── HISTORY DATA (one team per run) ─────────────────────────────
+    console.log('Fetching history data...');
+
+    const rotation = await rotateHistoryTeam(env);
+    if (rotation) {
+      console.log(`Fetching history for team ${rotation.teamId} (cursor: ${rotation.cursor})`);
+      
+      const newMatches = await fetchSwedishTeamMatches(rotation.teamId, env.PANDASCORE_TOKEN);
+      
+      // Merge with existing history
+      const existingHistoryJson = await env.MATCH_DATA.get(KV_HISTORY_DATA);
+      const existingHistory = existingHistoryJson ? JSON.parse(existingHistoryJson) : [];
+      
+      const mergedHistory = await mergeHistoryData(existingHistory, newMatches);
+      await env.MATCH_DATA.put(KV_HISTORY_DATA, JSON.stringify(mergedHistory));
+      
+      console.log(`History updated: ${mergedHistory.length} total matches`);
     }
 
-    // ─── PANDASCORE GET (read from KV with pagination support) ──────────
-    if (request.method === 'GET') {
-      if (!path.startsWith('/csgo/'))
-        return new Response('Not found', { status: 404 });
+    console.log('Scheduled handler completed');
+  } catch (err) {
+    console.error(`Scheduled handler error: ${err.message}`);
+    // Do NOT clear KV data on error — let the last good data persist
+  }
+}
 
-      // Handle pagination for /csgo/players and /csgo/matches/past
-      const pageParam = parseInt(url.searchParams.get('page') || '1');
-      const perPageParam = parseInt(url.searchParams.get('per_page') || '100');
+async function handleFetch(request, env) {
+  const origin = request.headers.get('Origin') || '';
+  const url    = new URL(request.url);
+  const path   = url.pathname;
 
-      let data = null;
+  if (request.method === 'OPTIONS')
+    return new Response(null, { status: 204, headers: corsHeaders(origin) });
 
-      if (path.includes('/players')) {
-        // Serve players from live_data with pagination support
-        const liveDataJson = await env.MATCH_DATA.get(KV_LIVE_DATA);
-        if (liveDataJson) {
-          const liveData = JSON.parse(liveDataJson);
-          const allPlayers = liveData.players || [];
-          
-          // Implement pagination: slice the full dataset
-          const startIdx = (pageParam - 1) * perPageParam;
-          const endIdx = startIdx + perPageParam;
-          data = allPlayers.slice(startIdx, endIdx);
-        }
-      } else if (path.includes('/matches/running')) {
-        // Serve running matches from live_data
-        const liveDataJson = await env.MATCH_DATA.get(KV_LIVE_DATA);
-        if (liveDataJson) {
-          const liveData = JSON.parse(liveDataJson);
-          data = liveData.running_matches || [];
-        }
-      } else if (path.includes('/matches/upcoming')) {
-        // Serve upcoming matches from live_data
-        const liveDataJson = await env.MATCH_DATA.get(KV_LIVE_DATA);
-        if (liveDataJson) {
-          const liveData = JSON.parse(liveDataJson);
-          data = liveData.upcoming_matches || [];
-        }
-      } else if (path.includes('/matches/past')) {
-        // Serve history from history_data with pagination support
-        const historyJson = await env.MATCH_DATA.get(KV_HISTORY_DATA);
-        if (historyJson) {
-          const allHistory = JSON.parse(historyJson);
-          
-          // Implement pagination: slice the full dataset
-          const startIdx = (pageParam - 1) * perPageParam;
-          const endIdx = startIdx + perPageParam;
-          data = allHistory.slice(startIdx, endIdx);
-        }
-      }
+  // Reject unauthorized requests early
+  if (!isAuthorized(request, env)) {
+    return new Response('Unauthorized', { status: 401, headers: corsHeaders(origin) });
+  }
 
-      if (data === null) {
+  // ─── GRID POST (read from KV) ────────────────────────────────────
+  if (request.method === 'POST') {
+    if (path === '/central' || path === '/live') {
+      // Both /central and /live now serve from KV live_data
+      const liveDataJson = await env.MATCH_DATA.get(KV_LIVE_DATA);
+      if (!liveDataJson) {
         return new Response(
-          JSON.stringify({ error: 'No cached data' }),
+          JSON.stringify({ error: 'No live data cached' }),
           { status: 503, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } }
         );
       }
-
-      return new Response(JSON.stringify(data), {
+      return new Response(liveDataJson, {
         status: 200,
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
       });
     }
+    return new Response('Not found', { status: 404 });
+  }
 
-    return new Response('Method not allowed', { status: 405 });
+  // ─── PANDASCORE GET (read from KV with pagination support) ──────────
+  if (request.method === 'GET') {
+    if (!path.startsWith('/csgo/'))
+      return new Response('Not found', { status: 404 });
+
+    // Handle pagination for /csgo/players and /csgo/matches/past
+    const pageParam = parseInt(url.searchParams.get('page') || '1');
+    const perPageParam = parseInt(url.searchParams.get('per_page') || '100');
+
+    let data = null;
+
+    if (path.includes('/players')) {
+      // Serve players from live_data with pagination support
+      const liveDataJson = await env.MATCH_DATA.get(KV_LIVE_DATA);
+      if (liveDataJson) {
+        const liveData = JSON.parse(liveDataJson);
+        const allPlayers = liveData.players || [];
+        
+        // Implement pagination: slice the full dataset
+        const startIdx = (pageParam - 1) * perPageParam;
+        const endIdx = startIdx + perPageParam;
+        data = allPlayers.slice(startIdx, endIdx);
+      }
+    } else if (path.includes('/matches/running')) {
+      // Serve running matches from live_data
+      const liveDataJson = await env.MATCH_DATA.get(KV_LIVE_DATA);
+      if (liveDataJson) {
+        const liveData = JSON.parse(liveDataJson);
+        data = liveData.running_matches || [];
+      }
+    } else if (path.includes('/matches/upcoming')) {
+      // Serve upcoming matches from live_data
+      const liveDataJson = await env.MATCH_DATA.get(KV_LIVE_DATA);
+      if (liveDataJson) {
+        const liveData = JSON.parse(liveDataJson);
+        data = liveData.upcoming_matches || [];
+      }
+    } else if (path.includes('/matches/past')) {
+      // Serve history from history_data with pagination support
+      const historyJson = await env.MATCH_DATA.get(KV_HISTORY_DATA);
+      if (historyJson) {
+        const allHistory = JSON.parse(historyJson);
+        
+        // Implement pagination: slice the full dataset
+        const startIdx = (pageParam - 1) * perPageParam;
+        const endIdx = startIdx + perPageParam;
+        data = allHistory.slice(startIdx, endIdx);
+      }
+    }
+
+    if (data === null) {
+      return new Response(
+        JSON.stringify({ error: 'No cached data' }),
+        { status: 503, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } }
+      );
+    }
+
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
+    });
+  }
+
+  return new Response('Method not allowed', { status: 405 });
+}
+
+// Named exports for Cloudflare Workers
+export async function scheduled(event, env) {
+  await handleScheduled(env);
+}
+
+export default {
+  async fetch(request, env) {
+    return handleFetch(request, env);
   },
 };
