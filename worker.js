@@ -1,11 +1,11 @@
 /**
- * SWE CS2 Tracker — Cloudflare Worker
+ * SWE CS2 Tracker — Cloudflare Worker (fixed)
  *
  * GET  /csgo/*   → PandaScore (cached at the Worker edge)
  * POST /central  → GRID central-data
  * POST /live     → GRID series-state (never cached — always live)
  *
- * Secrets: PANDASCORE_TOKEN, GRID_TOKEN
+ * Secrets: PANDASCORE_TOKEN, GRID_TOKEN, WORKER_SECRET
  *
  * Cache TTLs (shared across ALL users — one fetch serves everyone):
  *   /csgo/players*          → 6 hours  (rosters barely change)
@@ -33,9 +33,20 @@ function corsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin':  allowed,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Worker-Secret',
     'Access-Control-Max-Age':       '86400',
   };
+}
+
+// Server-side gatekeeping — this is the actual access control.
+// CORS above only makes browsers behave; this stops direct curl/script access.
+function isAuthorized(request, env) {
+  const origin = request.headers.get('Origin') || '';
+  const secret = request.headers.get('X-Worker-Secret') || '';
+
+  if (!ALLOWED_ORIGINS.includes(origin)) return false;
+  if (secret !== env.WORKER_SECRET) return false;
+  return true;
 }
 
 export default {
@@ -46,6 +57,12 @@ export default {
 
     if (request.method === 'OPTIONS')
       return new Response(null, { status: 204, headers: corsHeaders(origin) });
+
+    // Reject anything that isn't actually coming from your own frontend,
+    // before touching GRID or PandaScore at all.
+    if (!isAuthorized(request, env)) {
+      return new Response('Unauthorized', { status: 401, headers: corsHeaders(origin) });
+    }
 
     // ── GRID POST ─────────────────────────────────────────────────────────
     if (request.method === 'POST') {
