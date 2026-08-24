@@ -3,158 +3,839 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SWE CS2 · Direktresultat</title>
+  <title>SWE CS2 · Live Scores</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg:#0a0c0f; --surface:#111418; --surface2:#181d24; --border:#1f2733;
-      --accent:#f0d000; --accent2:#00e5a0; --text:#d6dce8; --muted:#6b7a90;
-      --mono:'Share Tech Mono',monospace; --display:'Barlow Condensed',sans-serif; --body:'Barlow',sans-serif;
+      --bg: #0f0f0f;
+      --bg-secondary: #1a1a1a;
+      --bg-tertiary: #252525;
+      --border: #333;
+      --text-primary: #fff;
+      --text-secondary: #b0b0b0;
+      --accent-primary: #ff6b35;
+      --accent-secondary: #00d9ff;
+      --success: #00d9ff;
+      --danger: #ff3e42;
+      --warning: #ffd700;
     }
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:15px;min-height:100vh}
-    body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(240,208,0,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(240,208,0,.015) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text-primary);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: 
+        repeating-linear-gradient(0deg, rgba(255,107,53,.03) 0px, rgba(255,107,53,.03) 1px, transparent 1px, transparent 2px),
+        repeating-linear-gradient(90deg, rgba(255,107,53,.03) 0px, rgba(255,107,53,.03) 1px, transparent 1px, transparent 2px);
+      background-size: 50px 50px;
+      pointer-events: none;
+      z-index: 0;
+    }
 
     /* ── HEADER ── */
-    header{position:sticky;top:0;z-index:100;background:rgba(10,12,15,.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 24px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;height:58px}
-    .logo{display:flex;align-items:center;gap:10px;text-decoration:none}
-    .logo-text{font-family:var(--display);font-size:22px;font-weight:800;letter-spacing:.08em;color:#fff;text-transform:uppercase}
-    .logo-text span{color:var(--accent)}
-    nav{display:flex;gap:4px;justify-content:center}
-    nav a{font-family:var(--display);font-size:14px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-decoration:none;padding:6px 16px;border-radius:4px;border:1px solid transparent;transition:color .15s,background .15s,border-color .15s}
-    nav a:hover{color:var(--text);background:var(--surface2)}
-    nav a.active{color:var(--accent);background:rgba(240,208,0,.08);border-color:rgba(240,208,0,.25)}
-    .header-right{display:flex;justify-content:flex-end;align-items:center;gap:14px}
-    .refresh-status{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
-    .pulse-dot{width:7px;height:7px;border-radius:50%;background:var(--accent2);animation:pulse 2s infinite}
-    @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-secondary) 90%, transparent 100%);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+    }
+
+    .header-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      max-width: 1400px;
+      margin: 0 auto;
+      height: 72px;
+      gap: 40px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+
+    .logo-flag {
+      width: 32px;
+      height: 32px;
+    }
+
+    .logo-text {
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: -1px;
+      color: var(--text-primary);
+    }
+
+    .logo-text span {
+      color: var(--accent-primary);
+    }
+
+    nav {
+      display: flex;
+      gap: 8px;
+      flex: 1;
+    }
+
+    nav a {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      text-decoration: none;
+      padding: 8px 20px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    nav a:hover {
+      color: var(--text-primary);
+      background: rgba(255, 107, 53, 0.1);
+      border-color: rgba(255, 107, 53, 0.3);
+    }
+
+    nav a.active {
+      color: var(--accent-primary);
+      background: rgba(255, 107, 53, 0.15);
+      border-color: var(--accent-primary);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-left: auto;
+    }
+
+    .refresh-status {
+      font-size: 13px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: rgba(0, 217, 255, 0.05);
+      border-radius: 4px;
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.9); }
+    }
 
     /* ── MAIN ── */
-    main{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:28px 20px 40px}
-    .page-title{font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:22px;display:flex;align-items:center;gap:10px}
-    .page-title::after{content:'';flex:1;height:1px;background:var(--border)}
-    .section-label{font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);margin:28px 0 12px;display:flex;align-items:center;gap:10px}
-    .section-label::before{content:'';width:3px;height:14px;background:var(--accent2);border-radius:1px}
-    .section-label.upcoming::before{background:var(--accent)}
+    main {
+      position: relative;
+      z-index: 1;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 40px 32px 60px;
+    }
+
+    .page-title {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: var(--text-primary);
+      margin-bottom: 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .page-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, var(--border) 0%, transparent 100%);
+    }
+
+    .section-label {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin: 40px 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .section-label::before {
+      content: '';
+      width: 4px;
+      height: 20px;
+      background: var(--accent-primary);
+      border-radius: 2px;
+    }
+
+    .section-label.upcoming::before {
+      background: var(--warning);
+    }
+
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 62, 66, 0.15);
+      border: 1px solid rgba(255, 62, 66, 0.4);
+      color: var(--danger);
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: 0.8px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      text-transform: uppercase;
+    }
+
+    .live-badge .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--danger);
+      animation: pulse-danger 1.5s infinite;
+    }
+
+    @keyframes pulse-danger {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
 
     /* ── MATCH CARD ── */
-    .match-card{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:6px;margin-bottom:10px;overflow:hidden;transition:border-color .2s,transform .15s;animation:cardIn .3s ease both}
-    @keyframes cardIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-    .match-card:hover{border-color:rgba(240,208,0,.4);transform:translateY(-1px)}
-    .match-card.live{border-left-color:var(--accent2)}
-    .match-card.live .match-card__top{background:linear-gradient(90deg,rgba(0,229,160,.04),transparent)}
-    .match-card__top{display:flex;align-items:center;padding:16px 18px;gap:14px}
+    .match-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 16px;
+      overflow: hidden;
+      transition: all 0.3s ease;
+      animation: slideIn 0.5s ease-out backwards;
+    }
 
-    .match-meta{display:flex;flex-direction:column;gap:4px;min-width:140px}
-    .match-tournament{font-family:var(--display);font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
-    .match-time{font-family:var(--mono);font-size:12px;color:var(--muted)}
-    .live-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.3);color:var(--accent2);font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.12em;padding:2px 7px;border-radius:3px;text-transform:uppercase}
-    .live-badge .dot{width:5px;height:5px;border-radius:50%;background:var(--accent2);animation:pulse 1.5s infinite}
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .match-card:hover {
+      border-color: var(--accent-primary);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(255, 107, 53, 0.15);
+    }
+
+    .match-card.live {
+      border-left: 4px solid var(--danger);
+    }
+
+    .match-card.live:hover {
+      box-shadow: 0 8px 24px rgba(255, 62, 66, 0.2);
+    }
+
+    .match-card__top {
+      display: flex;
+      align-items: center;
+      padding: 24px;
+      gap: 24px;
+      background: linear-gradient(90deg, rgba(255,107,53,.05) 0%, transparent 100%);
+    }
+
+    .match-card.live .match-card__top {
+      background: linear-gradient(90deg, rgba(255,62,66,.08) 0%, transparent 100%);
+    }
+
+    .match-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 160px;
+      flex-shrink: 0;
+    }
+
+    .match-tournament {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--accent-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .match-time {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.5px;
+    }
 
     /* ── TEAMS ── */
-    .teams-section{flex:1;display:flex;align-items:center;justify-content:space-between;gap:10px}
-    .team-col{display:flex;flex-direction:column;gap:6px;flex:1;min-width:0}
-    .team-col.right{align-items:flex-end}
-    .team-row{display:flex;align-items:center;gap:10px}
-    .team-row.right{flex-direction:row-reverse}
-    .team-logo{width:38px;height:38px;border-radius:4px;object-fit:contain;background:var(--surface2);padding:4px;flex-shrink:0}
-    .team-logo-ph{width:38px;height:38px;border-radius:4px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:13px;font-weight:700;color:var(--muted);flex-shrink:0}
-    .team-name{font-family:var(--display);font-size:19px;font-weight:700;letter-spacing:.03em;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .team-name.winner{color:var(--accent)}
-    .team-name.swe-hl{color:var(--accent2)}
-    .swe-pill{display:inline-flex;align-items:center;gap:4px;font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:3px;white-space:nowrap}
-    .swe-pill.full{background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.3);color:var(--accent2)}
-    .swe-pill.majority{background:rgba(100,149,237,.1);border:1px solid rgba(100,149,237,.3);color:#7aabff}
-    .swe-pill.partial{background:rgba(240,208,0,.08);border:1px solid rgba(240,208,0,.25);color:var(--accent)}
-    .location-badge{font-family:var(--display);font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.04em}
+    .teams-section {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .team-col {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .team-col.right {
+      align-items: flex-end;
+    }
+
+    .team-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .team-row.right {
+      flex-direction: row-reverse;
+    }
+
+    .team-logo {
+      width: 56px;
+      height: 56px;
+      border-radius: 6px;
+      object-fit: contain;
+      background: var(--bg-tertiary);
+      padding: 6px;
+      flex-shrink: 0;
+      border: 1px solid var(--border);
+    }
+
+    .team-logo-ph {
+      width: 56px;
+      height: 56px;
+      border-radius: 6px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+
+    .team-name {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.2;
+    }
+
+    .team-name.winner {
+      color: var(--success);
+    }
+
+    .team-name.swe-hl {
+      color: var(--success);
+    }
+
+    .swe-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid;
+      white-space: nowrap;
+      margin-top: 4px;
+    }
+
+    .swe-pill.full {
+      background: rgba(0, 217, 255, 0.15);
+      border-color: rgba(0, 217, 255, 0.4);
+      color: var(--success);
+    }
+
+    .swe-pill.majority {
+      background: rgba(100, 149, 237, 0.15);
+      border-color: rgba(100, 149, 237, 0.4);
+      color: #7aabff;
+    }
+
+    .swe-pill.partial {
+      background: rgba(255, 215, 0, 0.15);
+      border-color: rgba(255, 215, 0, 0.4);
+      color: var(--warning);
+    }
+
+    .location-badge {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      letter-spacing: 0.5px;
+      margin-top: 4px;
+    }
 
     /* ── SCORE ── */
-    .score-section{display:flex;flex-direction:column;align-items:center;gap:4px;padding:0 14px;min-width:90px}
-    .score-main{font-family:var(--mono);font-size:30px;line-height:1}
-    .score-sep{color:var(--muted);margin:0 3px}
-    .score-bo{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)}
+    .score-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 0 20px;
+      min-width: 120px;
+      flex-shrink: 0;
+    }
+
+    .score-main {
+      font-size: 52px;
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: -1px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .score-sep {
+      color: var(--text-secondary);
+      font-size: 32px;
+    }
+
+    .score-bo {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
 
     /* ── MAP BREAKDOWN ── */
-    .match-card__maps{border-top:1px solid var(--border);display:flex;overflow-x:auto;scrollbar-width:none}
-    .match-card__maps::-webkit-scrollbar{display:none}
-    .map-item{flex:1;min-width:110px;padding:10px 14px;border-right:1px solid var(--border);display:flex;flex-direction:column;gap:5px}
-    .map-item:last-child{border-right:none}
-    .map-name-row{display:flex;align-items:center;justify-content:space-between}
-    .map-name{font-family:var(--display);font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
-    .map-name.active{color:#fff}
-    .map-status{font-family:var(--mono);font-size:11px;color:var(--muted)}
-    .map-status.live{color:var(--accent2)}
-    .map-status.done{color:var(--muted)}
-    .map-status.pending{color:var(--muted);opacity:.5}
-    .map-pending{opacity:.55}
-    .map-picker{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .map-picker .pick-label{opacity:.55;font-weight:400}
-    .map-picker .pick-team{color:var(--accent);font-weight:700}
-    .map-picker .pick-team.swe-pick{color:var(--accent2)}
-    .map-picker .pick-decider{color:var(--muted);font-style:italic;font-weight:400}
-    .map-score-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px}
-    .map-score{font-family:var(--mono);font-size:22px;line-height:1}
-    .map-score.left{text-align:left}
-    .map-score.right{text-align:right}
-    .map-score.win{color:var(--accent)}
-    .map-score.lose{color:var(--muted)}
-    .map-dash{color:var(--muted);font-family:var(--mono);font-size:14px;text-align:center}
-    .round-bar{display:flex;height:3px;border-radius:2px;overflow:hidden;gap:1px}
-    .round-bar .ct{background:rgba(100,160,255,.6)}
-    .round-bar .t{background:rgba(255,180,50,.6)}
+    .match-card__maps {
+      border-top: 1px solid var(--border);
+      display: flex;
+      overflow-x: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .match-card__maps::-webkit-scrollbar {
+      height: 6px;
+    }
+
+    .match-card__maps::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .match-card__maps::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .map-item {
+      flex: 0 0 140px;
+      padding: 16px;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: var(--bg-tertiary);
+    }
+
+    .map-item:last-child {
+      border-right: none;
+    }
+
+    .map-name-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .map-name {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+
+    .map-name.active {
+      color: var(--text-primary);
+      font-size: 18px;
+    }
+
+    .map-status {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+
+    .map-status.live {
+      color: var(--danger);
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      0%, 49%, 100% { opacity: 1; }
+      50%, 99% { opacity: 0.6; }
+    }
+
+    .map-status.done {
+      color: var(--success);
+    }
+
+    .map-picker {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-secondary);
+    }
+
+    .map-picker .pick-label {
+      opacity: 0.7;
+    }
+
+    .map-picker .pick-team {
+      color: var(--accent-primary);
+      font-weight: 700;
+    }
+
+    .map-picker .pick-team.swe-pick {
+      color: var(--success);
+    }
+
+    .map-picker .pick-decider {
+      color: var(--warning);
+      font-style: italic;
+    }
+
+    .map-score-row {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .map-score {
+      font-size: 28px;
+      font-weight: 900;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .map-score.left {
+      text-align: left;
+    }
+
+    .map-score.right {
+      text-align: right;
+    }
+
+    .map-score.win {
+      color: var(--success);
+    }
+
+    .map-score.lose {
+      color: var(--text-secondary);
+    }
+
+    .map-dash {
+      color: var(--text-secondary);
+      font-weight: 700;
+    }
+
+    .round-bar {
+      display: flex;
+      height: 4px;
+      border-radius: 2px;
+      overflow: hidden;
+      gap: 1px;
+      background: var(--bg-secondary);
+    }
+
+    .round-bar .ct {
+      background: linear-gradient(90deg, #4a90ff, #6ab3ff);
+    }
+
+    .round-bar .t {
+      background: linear-gradient(90deg, #ffb433, #ffd700);
+    }
 
     /* ── STATES ── */
-    .state-card{text-align:center;padding:60px 20px;color:var(--muted)}
-    .state-card .icon{font-size:42px;margin-bottom:16px;opacity:.4}
-    .state-card h3{font-family:var(--display);font-size:20px;font-weight:700;letter-spacing:.06em;color:var(--text);margin-bottom:8px}
-    .state-card p{font-size:15px;line-height:1.6;max-width:420px;margin:0 auto}
-    .spinner{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
-    @keyframes spin{to{transform:rotate(360deg)}}
-
-    @media(max-width:600px){
-      .match-card__top{flex-wrap:wrap;padding:12px}
-      .match-meta{min-width:auto;width:100%}
-      .teams-section{width:100%}
-      .team-name{font-size:14px}
-      .team-logo,.team-logo-ph{width:28px;height:28px}
-      .score-main{font-size:22px}
-      .score-section{min-width:60px;padding:0 8px}
-      .map-item{min-width:88px;padding:8px 10px}
-      .map-score{font-size:18px}
-      header{padding:0 12px}
-      nav a{padding:5px 10px;font-size:13px}
+    .state-card {
+      text-align: center;
+      padding: 80px 40px;
+      color: var(--text-secondary);
     }
-    @media(max-width:360px){
-      .team-name{font-size:12px}
-      .score-main{font-size:19px}
-      .score-section{min-width:50px}
+
+    .state-card .icon {
+      font-size: 64px;
+      margin-bottom: 24px;
+      opacity: 0.5;
+    }
+
+    .state-card h3 {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+      letter-spacing: -0.5px;
+    }
+
+    .state-card p {
+      font-size: 16px;
+      line-height: 1.6;
+      max-width: 500px;
+      margin: 0 auto;
+      color: var(--text-secondary);
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent-primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 24px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 1024px) {
+      main {
+        padding: 32px 24px 60px;
+      }
+
+      .match-card__top {
+        padding: 20px;
+        gap: 16px;
+      }
+
+      .team-name {
+        font-size: 22px;
+      }
+
+      .score-main {
+        font-size: 44px;
+      }
+
+      .match-meta {
+        min-width: 140px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      header {
+        padding: 0 16px;
+      }
+
+      .header-content {
+        padding: 0;
+        height: 60px;
+        gap: 16px;
+      }
+
+      .logo-text {
+        font-size: 22px;
+      }
+
+      nav {
+        display: none;
+      }
+
+      main {
+        padding: 24px 16px 60px;
+      }
+
+      .page-title {
+        font-size: 24px;
+        margin-bottom: 24px;
+      }
+
+      .match-card__top {
+        flex-wrap: wrap;
+        padding: 16px;
+        gap: 12px;
+      }
+
+      .match-meta {
+        width: 100%;
+        min-width: auto;
+      }
+
+      .teams-section {
+        width: 100%;
+        gap: 12px;
+      }
+
+      .team-name {
+        font-size: 18px;
+      }
+
+      .team-logo,
+      .team-logo-ph {
+        width: 44px;
+        height: 44px;
+      }
+
+      .score-main {
+        font-size: 36px;
+      }
+
+      .score-section {
+        min-width: 80px;
+        padding: 0 12px;
+      }
+
+      .map-item {
+        flex: 0 0 120px;
+        padding: 12px;
+      }
+
+      .map-score {
+        font-size: 24px;
+      }
+
+      .header-right {
+        display: none;
+      }
+
+      .state-card {
+        padding: 60px 20px;
+      }
+
+      .state-card h3 {
+        font-size: 22px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .page-title {
+        font-size: 20px;
+      }
+
+      .team-name {
+        font-size: 16px;
+      }
+
+      .score-main {
+        font-size: 32px;
+      }
+
+      .match-tournament {
+        font-size: 12px;
+      }
+
+      .match-time {
+        font-size: 16px;
+      }
+
+      .map-item {
+        flex: 0 0 100px;
+        padding: 10px;
+      }
+
+      .map-name {
+        font-size: 14px;
+      }
+
+      .map-score {
+        font-size: 20px;
+      }
     }
   </style>
 </head>
 <body>
 
 <header>
-  <a class="logo" href="./">
-    <svg class="logo-flag" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="28" height="28"><rect width="32" height="32" rx="6" fill="#004B87"/><rect y="12" width="32" height="8" fill="#FFC200"/><rect x="11" width="8" height="32" fill="#FFC200"/></svg>
-    <span class="logo-text">SWE<span>CS2</span></span>
-  </a>
-  <nav>
-    <a href="./" class="active">Live</a>
-    <a href="history">Historik</a>
-  </nav>
-  <div class="header-right">
-    <div class="refresh-status">
-      <div class="pulse-dot"></div>
-      <span id="last-update">Laddar…</span>
+  <div class="header-content">
+    <a class="logo" href="./">
+      <svg class="logo-flag" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#004B87"/><rect y="12" width="32" height="8" fill="#FFD700"/><rect x="12" width="8" height="32" fill="#FFD700"/></svg>
+      <span class="logo-text">SWE<span>CS2</span></span>
+    </a>
+    <nav>
+      <a href="./" class="active">Live</a>
+      <a href="history">History</a>
+    </nav>
+    <div class="header-right">
+      <div class="refresh-status">
+        <div class="pulse-dot"></div>
+        <span id="last-update">Loading…</span>
+      </div>
     </div>
   </div>
 </header>
 
 <main>
-  <div class="page-title">Direktresultat · Svensk CS2-tracker</div>
-  <div id="content"><div class="state-card"><div class="spinner"></div><p>Hämtar matcher…</p></div></div>
+  <div class="page-title">Live Scores</div>
+  <div id="content">
+    <div class="state-card">
+      <div class="spinner"></div>
+      <p>Loading matches…</p>
+    </div>
+  </div>
 </main>
 
 <script src="shared.js"></script>
@@ -176,7 +857,6 @@ async function fetchMatches() {
     await ensureSwedishData();
 
     const [runningList, upcomingList] = await Promise.all([
-      // Include games + pick_bans for map names and pick info
       pandaFetch('/csgo/matches/running?per_page=50&include=opponents,results,games,pick_bans'),
       pandaFetch('/csgo/matches/upcoming?per_page=30&sort=begin_at&include=opponents'),
     ]);
@@ -184,7 +864,6 @@ async function fetchMatches() {
     const sweRunning  = runningList.filter(hasSweTeam);
     const sweUpcoming = upcomingList.filter(hasSweTeam);
 
-    // GRID: get CS2 series for live round-score enrichment
     let gridSeries = [];
     try {
       const now = new Date();
@@ -194,7 +873,6 @@ async function fetchMatches() {
       gridSeries = (gd?.allSeries?.edges || []).map(e => e.node).filter(s => s.title?.nameShortened === 'cs2');
     } catch(e) { console.warn('[GRID] Central failed:', e); }
 
-    // Enrich each live match with GRID series state (round scores + map names)
     const enriched = await Promise.all(sweRunning.map(async match => {
       const t1 = match.opponents?.[0]?.opponent;
       const t2 = match.opponents?.[1]?.opponent;
@@ -221,7 +899,7 @@ async function fetchMatches() {
       renderMatches(enriched, sweUpcoming);
     }
 
-    document.getElementById('last-update').textContent = 'Uppdaterad ' + new Date().toLocaleTimeString('sv-SE');
+    document.getElementById('last-update').textContent = 'Updated ' + new Date().toLocaleTimeString('sv-SE');
 
     const interval = enriched.length > 0 ? LIVE_TTL : sweUpcoming.length > 0 ? UPCOMING_TTL : 15 * 60 * 1000;
     clearTimeout(pollTimer);
@@ -233,8 +911,8 @@ async function fetchMatches() {
       document.getElementById('content').innerHTML = `
         <div class="state-card">
           <div class="icon">⚠️</div>
-          <h3>Anslutningsfel</h3>
-          <p>${err.status ? 'API-fel ' + err.status + '.' : 'Kunde inte nå servern.'}</p>
+          <h3>Connection Error</h3>
+          <p>${err.status ? 'API error ' + err.status + '.' : 'Unable to reach server.'}</p>
         </div>`;
     }
     clearTimeout(pollTimer);
@@ -242,8 +920,6 @@ async function fetchMatches() {
   }
 }
 
-
-// ── MAP WIN-RATE from cached history ─────────────────────────────────────
 function mapWinRate(teamId, mapNameFormatted) {
   try {
     const raw = localStorage.getItem('swe_history');
@@ -256,8 +932,6 @@ function mapWinRate(teamId, mapNameFormatted) {
         const mn = formatMapName(g.map?.name);
         if (mn !== mapNameFormatted) return;
         if (g.status === 'finished' || g.winner) {
-          const winnerId = g.winner?.id ?? (m.winner?.id === (m.opponents?.[0]?.opponent?.id) ? m.opponents?.[0]?.opponent?.id : m.opponents?.[1]?.opponent?.id);
-          // check via game results
           if (g.results?.length) {
             const teamResult = g.results.find(r => r.team_id === teamId);
             const opp = g.results.find(r => r.team_id !== teamId);
@@ -269,7 +943,7 @@ function mapWinRate(teamId, mapNameFormatted) {
       });
     });
     const total = wins + losses;
-    if (total < 2) return null; // not enough data
+    if (total < 2) return null;
     const pct = Math.round(wins / total * 100);
     return { wins, losses, total, pct };
   } catch(_) { return null; }
@@ -278,14 +952,14 @@ function mapWinRate(teamId, mapNameFormatted) {
 function renderMatches(live, upcoming) {
   let html = '';
   if (!live.length && !upcoming.length) {
-    html = `<div class="state-card"><div class="icon">📡</div><h3>Inga svenska matcher just nu</h3><p>Det finns inga direktsända eller kommande CS2-matcher med svenska spelare för tillfället.</p></div>`;
+    html = `<div class="state-card"><div class="icon">📡</div><h3>No Swedish Matches</h3><p>No live or upcoming CS2 matches with Swedish players right now.</p></div>`;
   } else {
     if (live.length) {
-      html += `<div class="section-label"><span class="live-badge" style="font-size:12px;padding:3px 10px"><span class="dot"></span>LIVE</span><span style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:6px">${live.length} match${live.length !== 1 ? 'er' : ''}</span></div>`;
+      html += `<div class="section-label"><span class="live-badge"><span class="dot"></span>LIVE</span><span style="color:var(--text-secondary);font-size:13px;margin-left:8px">${live.length} Match${live.length===1?'':'es'}</span></div>`;
       live.forEach((m, i) => { html += renderCard(m, true, i * 50); });
     }
     if (upcoming.length) {
-      html += `<div class="section-label upcoming">Kommande</div>`;
+      html += `<div class="section-label upcoming">Upcoming</div>`;
       upcoming.forEach((m, i) => { html += renderCard(m, false, i * 40); });
     }
   }
@@ -308,44 +982,39 @@ function renderCard(match, isLive, delay) {
 
   const state      = match.state;
   const stateGames = state?.games || [];
-
-  // Extract picks from PandaScore pick_bans
   const picks = extractPicksInOrder(match);
 
   let mapsHtml = '';
 
-  // Helper: build one map-item card used in both GRID and PandaScore paths
   function buildMapItem(mn, pick, r1, r2, status, t1Id, t2Id) {
-    // status: 'live' | 'done' | 'pending'
     const isSwePickTeam = pick && ((t1swe && pick.teamId === t1Id) || (t2swe && pick.teamId === t2Id));
 
-    // Win-rate rows for both teams (only if we have map name)
     let wrHtml = '';
     if (mn) {
       const wr1 = t1?.id ? mapWinRate(t1.id, mn) : null;
       const wr2 = t2?.id ? mapWinRate(t2.id, mn) : null;
       if (wr1 || wr2) {
-        const fmt = (wr, name) => wr
-          ? `<span style="font-family:var(--mono);font-size:10px;color:${wr.pct>=50?'var(--accent2)':'var(--muted)'};">${wr.pct}% (${wr.wins}V/${wr.losses}F)</span>`
+        const fmt = (wr) => wr
+          ? `<span style="font-size:11px;font-weight:700;color:${wr.pct>=50?'var(--success)':'var(--text-secondary)'};">${wr.pct}% (${wr.wins}W/${wr.losses}L)</span>`
           : '';
-        const r1html = fmt(wr1, t1?.name);
-        const r2html = fmt(wr2, t2?.name);
+        const r1html = fmt(wr1);
+        const r2html = fmt(wr2);
         if (r1html || r2html) {
-          wrHtml = `<div style="display:flex;justify-content:space-between;gap:4px;margin-top:2px">${r1html}<span></span>${r2html}</div>`;
+          wrHtml = `<div style="display:flex;justify-content:space-between;gap:4px;margin-top:6px">${r1html}<span></span>${r2html}</div>`;
         }
       }
     }
 
     let pickerHtml = '';
     if (pick) {
-      pickerHtml = `<div class="map-picker"><span class="pick-label">Val: </span><span class="pick-team${isSwePickTeam ? ' swe-pick' : ''}">${pick.teamName || '?'}</span></div>`;
+      pickerHtml = `<div class="map-picker"><span class="pick-label">Pick: </span><span class="pick-team${isSwePickTeam ? ' swe-pick' : ''}">${pick.teamName || '?'}</span></div>`;
     } else if (status === 'pending' && mn) {
-      pickerHtml = `<div class="map-picker"><span class="pick-decider">Avgörande</span></div>`;
+      pickerHtml = `<div class="map-picker"><span class="pick-decider">Decider</span></div>`;
     }
 
     if (status === 'done') {
       return `<div class="map-item">
-        <div class="map-name-row"><span class="map-name">${mn || '—'}</span><span class="map-status done">AVSLUTAD</span></div>
+        <div class="map-name-row"><span class="map-name">${mn || '—'}</span><span class="map-status done">DONE</span></div>
         ${pickerHtml}
         <div class="map-score-row">
           <span class="map-score left ${r1 > r2 ? 'win' : 'lose'}">${r1 ?? '—'}</span>
@@ -367,15 +1036,14 @@ function renderCard(match, isLive, delay) {
         </div>
         ${wrHtml}</div>`;
     } else {
-      return `<div class="map-item map-pending">
-        <div class="map-name-row"><span class="map-name">${mn || 'TBD'}</span><span class="map-status pending">NÄSTA</span></div>
+      return `<div class="map-item">
+        <div class="map-name-row"><span class="map-name">${mn || 'TBD'}</span><span class="map-status">NEXT</span></div>
         ${pickerHtml}
-        ${wrHtml}<div style="height:${wrHtml?'4':'22'}px"></div></div>`;
+        ${wrHtml}<div style="height:${wrHtml?'4':'16'}px"></div></div>`;
     }
   }
 
   if (isLive && stateGames.length) {
-    // GRID path — has live round scores + map names
     const t1StateName = state?.teams?.find(t => normName(t.name) === normName(t1?.name))?.name || state?.teams?.[0]?.name;
     const t2StateName = state?.teams?.find(t => normName(t.name) === normName(t2?.name))?.name || state?.teams?.[1]?.name;
 
@@ -394,7 +1062,6 @@ function renderCard(match, isLive, delay) {
     mapsHtml = `<div class="match-card__maps">${mapItems}</div>`;
 
   } else if (isLive && (match.games || []).some(g => g.status !== 'not_started')) {
-    // PandaScore fallback — no live round scores but has map names + picks
     const activeGames = (match.games || []).filter(g => g.status !== 'not_started' && g.status !== 'canceled');
     const mapItems = activeGames.map((g, idx) => {
       const mn = formatMapName(g.map?.name);
@@ -408,14 +1075,13 @@ function renderCard(match, isLive, delay) {
     mapsHtml = `<div class="match-card__maps">${mapItems}</div>`;
 
   } else if (isLive) {
-    // No game data at all yet — show dot progress
     const dots = Array.from({ length: match.number_of_games || 1 }, (_, i) => {
       const done = i < t1Maps + t2Maps, cur = i === t1Maps + t2Maps;
-      const c = done ? 'var(--muted)' : cur ? 'var(--accent2)' : 'var(--border)';
-      return `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};${cur ? 'box-shadow:0 0 7px var(--accent2)' : ''}"></span>`;
+      const c = done ? 'var(--text-secondary)' : cur ? 'var(--success)' : 'var(--border)';
+      return `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${c};${cur ? 'box-shadow:0 0 10px var(--success)' : ''}"></span>`;
     }).join('');
-    mapsHtml = `<div style="padding:9px 18px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px">
-      <span style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.1em;margin-right:2px">KARTOR</span>${dots}</div>`;
+    mapsHtml = `<div style="padding:12px 24px;border-top:1px solid var(--border);display:flex;align-items:center;gap:12px;background:var(--bg-tertiary)">
+      <span style="font-size:12px;font-weight:700;color:var(--text-secondary);letter-spacing:.05em;text-transform:uppercase;margin-right:4px">Maps</span>${dots}</div>`;
   }
 
   return `
@@ -432,9 +1098,9 @@ function renderCard(match, isLive, delay) {
         </div>
         <div class="score-section">
           <div class="score-main">
-            <span style="color:${t1Win ? 'var(--accent)' : t2Win ? 'var(--muted)' : '#fff'}">${t1Maps}</span>
+            <span style="color:${t1Win ? 'var(--success)' : t2Win ? 'var(--text-secondary)' : '#fff'}">${t1Maps}</span>
             <span class="score-sep">:</span>
-            <span style="color:${t2Win ? 'var(--accent)' : t1Win ? 'var(--muted)' : '#fff'}">${t2Maps}</span>
+            <span style="color:${t2Win ? 'var(--success)' : t1Win ? 'var(--text-secondary)' : '#fff'}">${t2Maps}</span>
           </div>
           <div class="score-bo">${bo}</div>
         </div>
