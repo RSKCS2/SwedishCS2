@@ -3,178 +3,847 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SWE CS2 · Resultathistorik</title>
+  <title>SWE CS2 · Match History</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
   <style>
-    :root{
-      --bg:#0a0c0f;--surface:#111418;--surface2:#181d24;--border:#1f2733;
-      --accent:#f0d000;--accent2:#00e5a0;--red:#ff3d5a;--text:#d6dce8;--muted:#6b7a90;
-      --mono:'Share Tech Mono',monospace;--display:'Barlow Condensed',sans-serif;--body:'Barlow',sans-serif;
+    :root {
+      --bg: #0f0f0f;
+      --bg-secondary: #1a1a1a;
+      --bg-tertiary: #252525;
+      --border: #333;
+      --text-primary: #fff;
+      --text-secondary: #b0b0b0;
+      --accent-primary: #ff6b35;
+      --accent-secondary: #00d9ff;
+      --success: #00d9ff;
+      --danger: #ff3e42;
+      --warning: #ffd700;
     }
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:15px;min-height:100vh}
-    body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(240,208,0,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(240,208,0,.015) 1px,transparent 1px);background-size:20px 20px;pointer-events:none;z-index:0}
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text-primary);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: 
+        repeating-linear-gradient(0deg, rgba(255,107,53,.03) 0px, rgba(255,107,53,.03) 1px, transparent 1px, transparent 2px),
+        repeating-linear-gradient(90deg, rgba(255,107,53,.03) 0px, rgba(255,107,53,.03) 1px, transparent 1px, transparent 2px);
+      background-size: 50px 50px;
+      pointer-events: none;
+      z-index: 0;
+    }
 
     /* ── HEADER ── */
-    header{position:sticky;top:0;z-index:100;background:rgba(10,12,15,.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 24px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;height:56px}
-    .logo{display:flex;align-items:center;gap:10px;text-decoration:none}
-    .logo-text{font-family:var(--display);font-size:22px;font-weight:800;letter-spacing:.08em;color:#fff;text-transform:uppercase}
-    .logo-text span{color:var(--accent)}
-    nav{display:flex;gap:4px;justify-content:center}
-    nav a{font-family:var(--display);font-size:14px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-decoration:none;padding:6px 16px;border-radius:4px;border:1px solid transparent;transition:.2s}
-    nav a:hover{color:var(--text);background:var(--surface2)}
-    nav a.active{color:var(--accent);background:rgba(240,208,0,.08);border-color:rgba(240,208,0,.25)}
-    .header-spacer{display:flex;justify-content:flex-end}
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-secondary) 90%, transparent 100%);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+    }
+
+    .header-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      max-width: 1400px;
+      margin: 0 auto;
+      height: 72px;
+      gap: 40px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+
+    .logo-flag {
+      width: 32px;
+      height: 32px;
+    }
+
+    .logo-text {
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: -1px;
+      color: var(--text-primary);
+    }
+
+    .logo-text span {
+      color: var(--accent-primary);
+    }
+
+    nav {
+      display: flex;
+      gap: 8px;
+      flex: 1;
+    }
+
+    nav a {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      text-decoration: none;
+      padding: 8px 20px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    nav a:hover {
+      color: var(--text-primary);
+      background: rgba(255, 107, 53, 0.1);
+      border-color: rgba(255, 107, 53, 0.3);
+    }
+
+    nav a.active {
+      color: var(--accent-primary);
+      background: rgba(255, 107, 53, 0.15);
+      border-color: var(--accent-primary);
+    }
 
     /* ── MAIN ── */
-    main{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:28px 20px 60px}
-    .page-title{font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:22px;display:flex;align-items:center;gap:10px}
-    .page-title::after{content:'';flex:1;height:1px;background:var(--border)}
+    main {
+      position: relative;
+      z-index: 1;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 40px 32px 60px;
+    }
+
+    .page-title {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: var(--text-primary);
+      margin-bottom: 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .page-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, var(--border) 0%, transparent 100%);
+    }
 
     /* ── CONTROLS ── */
-    .controls{display:flex;gap:10px;margin-bottom:22px;flex-wrap:wrap;align-items:center}
-    .search-wrap{flex:1;min-width:180px;max-width:280px;position:relative}
-    .search-wrap::before{content:'⌕';position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:16px;pointer-events:none}
-    #search-input{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:var(--body);font-size:14px;padding:7px 12px 7px 30px;border-radius:4px;outline:none;transition:.2s}
-    #search-input:focus{border-color:var(--accent)}
-    #search-input::placeholder{color:var(--muted)}
+    .controls {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
 
-    /* ── STATS PANELS ── */
-    .stats-section{margin-bottom:24px;display:flex;flex-direction:column;gap:10px}
+    .search-wrap {
+      flex: 1;
+      min-width: 200px;
+      max-width: 320px;
+      position: relative;
+    }
 
-    .period-tabs{display:flex;gap:4px;flex-wrap:wrap}
-    .period-tab{font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:5px 14px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;transition:.2s}
-    .period-tab:hover{color:var(--text);border-color:var(--text)}
-    .period-tab.active{color:var(--accent);background:rgba(240,208,0,.08);border-color:rgba(240,208,0,.25)}
+    .search-wrap::before {
+      content: '🔍';
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 16px;
+      pointer-events: none;
+    }
 
-    .stats-bar{display:flex;gap:1px;border-radius:6px;overflow:hidden;border:1px solid var(--border)}
-    .stat-item{flex:1;padding:14px 16px;background:var(--surface);text-align:center}
-    .stat-value{font-family:var(--mono);font-size:26px;color:#fff;line-height:1;margin-bottom:4px}
-    .stat-value.green{color:var(--accent2)}
-    .stat-value.yellow{color:var(--accent)}
-    .stat-value.red{color:var(--red)}
-    .stat-label{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)}
+    #search-input {
+      width: 100%;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 15px;
+      padding: 10px 12px 10px 40px;
+      border-radius: 6px;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    #search-input:focus {
+      border-color: var(--accent-primary);
+      background: var(--bg-tertiary);
+    }
+
+    #search-input::placeholder {
+      color: var(--text-secondary);
+    }
+
+    /* ── STATS SECTION ── */
+    .stats-section {
+      margin-bottom: 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .period-tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .period-tab {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      padding: 10px 16px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .period-tab:hover {
+      color: var(--text-primary);
+      border-color: var(--accent-primary);
+      background: rgba(255, 107, 53, 0.05);
+    }
+
+    .period-tab.active {
+      color: var(--text-primary);
+      background: rgba(255, 107, 53, 0.15);
+      border-color: var(--accent-primary);
+    }
+
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .stat-item {
+      padding: 24px;
+      background: var(--bg-secondary);
+      text-align: center;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .stat-item:last-child {
+      border-right: none;
+    }
+
+    .stat-value {
+      font-size: 32px;
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: -1px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-value.green {
+      color: var(--success);
+    }
+
+    .stat-value.yellow {
+      color: var(--warning);
+    }
+
+    .stat-value.red {
+      color: var(--danger);
+    }
+
+    .stat-label {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
 
     /* ── RESULT CARD ── */
-    .result-card{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:6px;margin-bottom:8px;overflow:hidden;transition:border-color .2s;animation:cardIn .4s ease-out forwards}
-    .result-card.won{border-left-color:var(--accent2)}
-    .result-card.lost{border-left-color:var(--red)}
-    @keyframes cardIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-    .result-card:hover{border-color:rgba(240,208,0,.3)}
-    .result-card.won:hover{border-color:rgba(0,229,160,.3)}
-    .result-card.lost:hover{border-color:rgba(255,61,90,.3)}
-    .result-card__row{display:flex;align-items:center;padding:14px 18px;gap:14px}
-    .result-date{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:48px;white-space:nowrap}
-    .result-tournament{font-family:var(--display);font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);min-width:120px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .result-teams{flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+    .result-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--accent-primary);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      overflow: hidden;
+      transition: all 0.3s ease;
+      animation: slideIn 0.5s ease-out backwards;
+    }
 
-    .rt{display:flex;flex-direction:column;gap:5px;flex:1;min-width:0}
-    .rt.right{align-items:flex-end}
-    .rt-namerow{display:flex;align-items:center;gap:8px}
-    .rt.right .rt-namerow{flex-direction:row-reverse}
-    .rt-logo{width:28px;height:28px;object-fit:contain;background:var(--surface2);border-radius:3px;padding:3px;flex-shrink:0}
-    .rt-logo-ph{width:28px;height:28px;background:var(--surface2);border-radius:3px;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0}
-    .rt-name{font-family:var(--display);font-size:17px;font-weight:700;letter-spacing:.03em;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .rt-name.winner{color:var(--accent2)}
-    .rt-name.loser{color:var(--muted)}
-    .rt-name.swe-hl{color:var(--accent2)}
-    .swe-pill{display:inline-flex;align-items:center;gap:4px;font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border-radius:3px;border:1px solid;white-space:nowrap}
-    .swe-pill.full{background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.3);color:var(--accent2)}
-    .swe-pill.majority{background:rgba(100,149,237,.1);border:1px solid rgba(100,149,237,.3);color:#7aabff}
-    .swe-pill.partial{background:rgba(240,208,0,.08);border:1px solid rgba(240,208,0,.25);color:var(--accent)}
-    .location-badge{font-family:var(--display);font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.04em}
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
 
-    .result-score{display:flex;flex-direction:column;align-items:center;padding:0 10px;min-width:72px}
-    .rs-main{font-family:var(--mono);font-size:22px;line-height:1}
-    .rs-label{font-family:var(--display);font-size:10px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-top:3px}
+    .result-card.won {
+      border-left-color: var(--success);
+    }
 
-    /* Map expand */
+    .result-card.lost {
+      border-left-color: var(--danger);
+    }
 
+    .result-card:hover {
+      border-color: var(--accent-primary);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(255, 107, 53, 0.15);
+    }
 
-    .date-group{font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);padding:20px 0 10px;display:flex;align-items:center;gap:10px}
-    .date-group::after{content:'';flex:1;height:1px;background:var(--border)}
+    .result-card.won:hover {
+      border-color: var(--success);
+      box-shadow: 0 8px 24px rgba(0, 217, 255, 0.15);
+    }
 
-    .state-card{text-align:center;padding:60px 20px;color:var(--muted)}
-    .state-card .icon{font-size:42px;margin-bottom:16px;opacity:.4}
-    .state-card h3{font-family:var(--display);font-size:20px;font-weight:700;letter-spacing:.06em;color:var(--text);margin-bottom:8px}
-    .state-card p{font-size:15px;line-height:1.6;max-width:420px;margin:0 auto}
-    .state-card a{color:var(--accent2)}
-    .spinner{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    .pagination-info{font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;padding:14px 0}
-    .pagination-controls{display:flex;align-items:center;justify-content:center;gap:16px;padding:20px 0}
-    .page-btn{font-family:var(--display);font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 16px;border-radius:4px;cursor:pointer;transition:.2s}
-    .page-btn:hover{border-color:var(--accent);color:var(--accent)}
-    .page-info{font-family:var(--mono);font-size:12px;color:var(--muted)}
+    .result-card.lost:hover {
+      border-color: var(--danger);
+      box-shadow: 0 8px 24px rgba(255, 62, 66, 0.15);
+    }
 
-    @media(max-width:600px){
-      .result-tournament{display:none}
-      .rt-name{font-size:13px}
-      .rs-main{font-size:16px}
-      .stats-bar{flex-wrap:wrap}
-      .stat-item{min-width:48%}
-      .result-card__row{flex-wrap:wrap;gap:8px}
-      .result-date{min-width:auto}
-      .result-teams{width:100%}
-      .rt-namerow{gap:5px}
+    .result-card__row {
+      display: flex;
+      align-items: center;
+      padding: 20px;
+      gap: 20px;
+    }
+
+    .result-date {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      min-width: 80px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .result-tournament {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--accent-primary);
+      min-width: 140px;
+      max-width: 160px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .result-teams {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .rt {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .rt.right {
+      align-items: flex-end;
+    }
+
+    .rt-namerow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .rt.right .rt-namerow {
+      flex-direction: row-reverse;
+    }
+
+    .rt-logo {
+      width: 40px;
+      height: 40px;
+      object-fit: contain;
+      background: var(--bg-tertiary);
+      border-radius: 6px;
+      padding: 4px;
+      flex-shrink: 0;
+      border: 1px solid var(--border);
+    }
+
+    .rt-logo-ph {
+      width: 40px;
+      height: 40px;
+      background: var(--bg-tertiary);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+      border: 1px solid var(--border);
+    }
+
+    .rt-name {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .rt-name.winner {
+      color: var(--success);
+      font-weight: 900;
+    }
+
+    .rt-name.loser {
+      color: var(--text-secondary);
+    }
+
+    .rt-name.swe-hl {
+      color: var(--success);
+      font-weight: 900;
+    }
+
+    .swe-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 4px;
+      border: 1px solid;
+      white-space: nowrap;
+    }
+
+    .swe-pill.full {
+      background: rgba(0, 217, 255, 0.15);
+      border-color: rgba(0, 217, 255, 0.4);
+      color: var(--success);
+    }
+
+    .swe-pill.majority {
+      background: rgba(100, 149, 237, 0.15);
+      border-color: rgba(100, 149, 237, 0.4);
+      color: #7aabff;
+    }
+
+    .swe-pill.partial {
+      background: rgba(255, 215, 0, 0.15);
+      border-color: rgba(255, 215, 0, 0.4);
+      color: var(--warning);
+    }
+
+    .location-badge {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+
+    .result-score {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      min-width: 80px;
+      flex-shrink: 0;
+      padding: 0 12px;
+    }
+
+    .rs-main {
+      font-size: 28px;
+      font-weight: 900;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -1px;
+    }
+
+    .rs-label {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+
+    /* ── DATE GROUP ── */
+    .date-group {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      padding: 32px 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 24px;
+      border-top: 1px solid var(--border);
+    }
+
+    .date-group::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── STATES ── */
+    .state-card {
+      text-align: center;
+      padding: 80px 40px;
+      color: var(--text-secondary);
+    }
+
+    .state-card .icon {
+      font-size: 64px;
+      margin-bottom: 24px;
+      opacity: 0.5;
+    }
+
+    .state-card h3 {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+      letter-spacing: -0.5px;
+    }
+
+    .state-card p {
+      font-size: 16px;
+      line-height: 1.6;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent-primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 24px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ── PAGINATION ── */
+    .pagination-info {
+      font-size: 13px;
+      color: var(--text-secondary);
+      text-align: center;
+      padding: 20px 0;
+      letter-spacing: 0.5px;
+    }
+
+    .pagination-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 32px 0;
+    }
+
+    .page-btn {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .page-btn:hover:not(:disabled) {
+      border-color: var(--accent-primary);
+      color: var(--accent-primary);
+      background: rgba(255, 107, 53, 0.1);
+    }
+
+    .page-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .page-info {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      min-width: 100px;
+      text-align: center;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 1024px) {
+      main {
+        padding: 32px 24px 60px;
+      }
+
+      .result-card__row {
+        padding: 16px;
+        gap: 16px;
+      }
+
+      .rt-name {
+        font-size: 16px;
+      }
+
+      .stats-bar {
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      }
+    }
+
+    @media (max-width: 768px) {
+      header {
+        padding: 0 16px;
+      }
+
+      .header-content {
+        height: 60px;
+        gap: 16px;
+      }
+
+      .logo-text {
+        font-size: 22px;
+      }
+
+      nav {
+        display: none;
+      }
+
+      main {
+        padding: 24px 16px 60px;
+      }
+
+      .page-title {
+        font-size: 24px;
+        margin-bottom: 24px;
+      }
+
+      .controls {
+        margin-bottom: 24px;
+      }
+
+      .search-wrap {
+        min-width: 100%;
+      }
+
+      .stats-bar {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .result-card__row {
+        flex-wrap: wrap;
+        padding: 16px;
+        gap: 12px;
+      }
+
+      .result-tournament {
+        display: none;
+      }
+
+      .result-date {
+        width: 100%;
+        min-width: auto;
+        order: -1;
+      }
+
+      .result-teams {
+        width: 100%;
+        order: 0;
+      }
+
+      .rt-name {
+        font-size: 14px;
+      }
+
+      .rt-logo,
+      .rt-logo-ph {
+        width: 36px;
+        height: 36px;
+      }
+
+      .rs-main {
+        font-size: 24px;
+      }
+
+      .period-tabs {
+        gap: 6px;
+      }
+
+      .period-tab {
+        font-size: 12px;
+        padding: 8px 12px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .page-title {
+        font-size: 20px;
+      }
+
+      .result-card__row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .result-date {
+        text-align: left;
+      }
+
+      .result-teams {
+        justify-content: space-between;
+      }
+
+      .rt {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .rt.right {
+        flex-direction: row;
+        align-items: center;
+      }
+
+      .rt-name {
+        font-size: 13px;
+      }
+
+      .rs-main {
+        font-size: 20px;
+      }
+
+      .stat-value {
+        font-size: 24px;
+      }
+
+      .stat-label {
+        font-size: 11px;
+      }
+
+      .pagination-controls {
+        gap: 8px;
+      }
+
+      .page-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+      }
     }
   </style>
 </head>
 <body>
 
 <header>
-  <a class="logo" href="./">
-    <svg class="logo-flag" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="28" height="28"><rect width="32" height="32" rx="6" fill="#004B87"/><rect y="12" width="32" height="8" fill="#FFD700"/><rect x="12" width="8" height="32" fill="#FFD700"/></svg>
-    <span class="logo-text">SWE<span>CS2</span></span>
-  </a>
-  <nav>
-    <a href="./">Live</a>
-    <a href="history" class="active">Historik</a>
-  </nav>
-  <div class="header-spacer"></div>
+  <div class="header-content">
+    <a class="logo" href="./">
+      <svg class="logo-flag" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#004B87"/><rect y="12" width="32" height="8" fill="#FFD700"/><rect x="12" width="8" height="32" fill="#FFD700"/></svg>
+      <span class="logo-text">SWE<span>CS2</span></span>
+    </a>
+    <nav>
+      <a href="./">Live</a>
+      <a href="history" class="active">History</a>
+    </nav>
+  </div>
 </header>
 
 <main>
-  <div class="page-title">Resultathistorik · Svensk CS2-tracker</div>
+  <div class="page-title">Match History</div>
 
   <div class="controls">
     <div class="search-wrap">
       <input id="search-input" type="text" autocomplete="off"
-             placeholder="Sök lag eller turnering…" oninput="onSearch(this.value)" />
+             placeholder="Search teams or tournaments…" oninput="onSearch(this.value)" />
     </div>
   </div>
 
   <div id="stats-section" class="stats-section" style="display:none">
     <div class="period-tabs">
-      <button class="period-tab active" onclick="setPeriod('year')">I år</button>
-      <button class="period-tab" onclick="setPeriod('9m')">9 månader</button>
-      <button class="period-tab" onclick="setPeriod('6m')">6 månader</button>
-      <button class="period-tab" onclick="setPeriod('3m')">3 månader</button>
-      <button class="period-tab" onclick="setPeriod('month')">Den här månaden</button>
-      <button class="period-tab" onclick="setPeriod('week')">Den här veckan</button>
-      <button class="period-tab" onclick="setPeriod('day')">Idag</button>
+      <button class="period-tab active" onclick="setPeriod('year')">This Year</button>
+      <button class="period-tab" onclick="setPeriod('9m')">9 Months</button>
+      <button class="period-tab" onclick="setPeriod('6m')">6 Months</button>
+      <button class="period-tab" onclick="setPeriod('3m')">3 Months</button>
+      <button class="period-tab" onclick="setPeriod('month')">This Month</button>
+      <button class="period-tab" onclick="setPeriod('week')">This Week</button>
+      <button class="period-tab" onclick="setPeriod('day')">Today</button>
     </div>
     <div class="stats-bar">
-      <div class="stat-item"><div class="stat-value" id="stat-total">—</div><div class="stat-label">Matcher</div></div>
-      <div class="stat-item"><div class="stat-value green" id="stat-wins">—</div><div class="stat-label">SWE Vinster</div></div>
-      <div class="stat-item"><div class="stat-value red" id="stat-losses">—</div><div class="stat-label">SWE Förluster</div></div>
-      <div class="stat-item"><div class="stat-value yellow" id="stat-winrate">—</div><div class="stat-label">Vinstprocent</div></div>
+      <div class="stat-item"><div class="stat-value" id="stat-total">—</div><div class="stat-label">Matches</div></div>
+      <div class="stat-item"><div class="stat-value green" id="stat-wins">—</div><div class="stat-label">SWE Wins</div></div>
+      <div class="stat-item"><div class="stat-value red" id="stat-losses">—</div><div class="stat-label">SWE Losses</div></div>
+      <div class="stat-item"><div class="stat-value yellow" id="stat-winrate">—</div><div class="stat-label">Win Rate</div></div>
     </div>
   </div>
 
   <div id="content">
-    <div class="state-card"><div class="spinner"></div><p>Laddar matchhistorik…</p></div>
+    <div class="state-card"><div class="spinner"></div><p>Loading match history…</p></div>
   </div>
 </main>
 
 <script src="shared.js"></script>
 <script>
-const CACHE_VERSION    = 'v3';  // bump this to force a fresh fetch after logic changes
+const CACHE_VERSION    = 'v3';
 const HISTORY_KEY      = 'swe_history_' + CACHE_VERSION;
 const HISTORY_FETCH_KEY = 'swe_history_fetched_' + CACHE_VERSION;
-const HISTORY_STALE_MS  = 2 * 60 * 60 * 1000;    // 2h — history doesn't change by the minute
+const HISTORY_STALE_MS  = 2 * 60 * 60 * 1000;
 const PERIODS = ['year','9m','6m','3m','month','week','day'];
 const PAGE_SIZE = 25;
 
@@ -190,7 +859,6 @@ window.addEventListener('DOMContentLoaded', () => {
     renderResults();
   }
 
-  // Only hit the API if cache is stale or empty
   const lastFetch = parseInt(localStorage.getItem(HISTORY_FETCH_KEY) || '0', 10);
   const isStale   = Date.now() - lastFetch > HISTORY_STALE_MS;
   if (isStale || !allMatches.length) {
@@ -198,265 +866,198 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-function loadAndPruneHistory() {
-  try {
-    const raw = localStorage.getItem(HISTORY_KEY);
-    if (!raw) return [];
-    const matches = JSON.parse(raw);
-    const yearStart = new Date(new Date().getFullYear(), 0, 1);
-    const pruned = matches.filter(m => new Date(m.end_at || m.begin_at) >= yearStart);
-    if (pruned.length !== matches.length) saveHistory(pruned);
-    return pruned;
-  } catch(_) { return []; }
-}
-
-function saveHistory(matches) {
-  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(matches)); } catch(_) {}
-}
-
 async function fetchAndMerge() {
   try {
     await ensureSwedishData();
-
-    const countBefore = allMatches.length;
-
-    const byId = {};
-    allMatches.forEach(m => { byId[m.id] = m; });
-
-    // Fetch merged history directly from Worker KV via /csgo/matches/past
-    // The Worker now returns the full merged dataset, paginated by page param
-    let page = 1;
-    while (true) {
-      try {
-        const batch = await pandaFetch(`/csgo/matches/past?per_page=100&page=${page}`);
-        if (!batch.length) break;
-        
-        batch.forEach(m => {
-          // Only include matches from this year
-          const matchDate = new Date(m.end_at || m.begin_at);
-          const yearStart_ = new Date(new Date().getFullYear(), 0, 1);
-          if (matchDate >= yearStart_) {
-            m.opponents?.forEach(o => cacheLogoFromTeam(o?.opponent));
-            byId[m.id] = m;
-          }
-        });
-        
-        if (batch.length < 100) break;  // Got fewer than requested = last page
-        page++;
-        if (page > 100) break;  // Safety limit
-      } catch (err) {
-        console.error(`[SWE History] Error fetching page ${page}:`, err);
-        break;
-      }
-    }
-
-    const merged = Object.values(byId)
-      .filter(hasSweTeam)
-      .sort((a, b) => new Date(b.end_at || b.begin_at) - new Date(a.end_at || a.begin_at));
-
-    localStorage.setItem(HISTORY_FETCH_KEY, String(Date.now()));
-
-    // Only re-render if we actually got new matches
-    if (merged.length !== countBefore) {
-      allMatches = merged;
-      // Save lean version — strip image_url, teamLogo() reads from swe_logos cache
-      saveHistory(allMatches.map(m => ({
-        ...m,
-        opponents: m.opponents?.map(o => o?.opponent
-          ? { ...o, opponent: { ...o.opponent, image_url: undefined } }
-          : o),
-      })));
-      document.getElementById('stats-section').style.display = 'flex';
-      renderResults();
-    } else {
-      // Nothing new — still save the timestamp so we don't re-fetch for 2h
-      allMatches = merged;
-    }
-
+    const pastList = await pandaFetch('/csgo/matches/past?per_page=100&include=opponents,results,games,winner');
+    const fetched  = pastList.filter(m => m.opponents?.length === 2 && (sweInfo(m.opponents[0]?.opponent) || sweInfo(m.opponents[1]?.opponent)));
+    const existing = cacheGet(HISTORY_KEY) || [];
+    const merged   = dedup([...fetched, ...existing]);
+    cacheSet(HISTORY_KEY, merged);
+    localStorage.setItem(HISTORY_FETCH_KEY, Date.now().toString());
+    allMatches = merged;
+    renderResults();
   } catch(err) {
-    console.error('[SWE History] Fetch error:', err);
-    if (!allMatches.length) {
-      document.getElementById('content').innerHTML = `
-        <div class="state-card">
-          <div class="icon">⚠️</div><h3>Anslutningsfel</h3>
-          <p>${err.status ? 'API-fel ' + err.status + '.' : 'Kunde inte nå servern.'}</p>
-        </div>`;
-    }
+    console.error('[SWE CS2] Fetch error:', err);
   }
 }
 
-function onSearch(val) { searchQuery = val.toLowerCase().trim(); currentPage = 1; renderResults(); }
-
-function setPeriod(p) {
-  activePeriod = p;
-  currentPage  = 1;
-  document.querySelectorAll('.period-tab').forEach((b, i) => {
-    b.classList.toggle('active', PERIODS[i] === p);
+function dedup(matches) {
+  const seen = new Set();
+  return matches.filter(m => {
+    if (seen.has(m.id)) return false;
+    seen.add(m.id);
+    return true;
   });
+}
+
+function loadAndPruneHistory() {
+  const raw = cacheGet(HISTORY_KEY) || [];
+  return raw.filter(m => m.begin_at && m.opponents?.length === 2);
+}
+
+function filterByPeriod(matches, period) {
+  const now = new Date();
+  let start;
+  switch(period) {
+    case 'year':    start = new Date(now.getFullYear(), 0, 1); break;
+    case '9m':      start = new Date(now); start.setMonth(now.getMonth() - 9); break;
+    case '6m':      start = new Date(now); start.setMonth(now.getMonth() - 6); break;
+    case '3m':      start = new Date(now); start.setMonth(now.getMonth() - 3); break;
+    case 'month':   start = new Date(now.getFullYear(), now.getMonth(), 1); break;
+    case 'week':    start = new Date(now); start.setDate(now.getDate() - now.getDay()); break;
+    case 'day':     start = new Date(now); start.setHours(0,0,0,0); break;
+    default:        start = new Date(0);
+  }
+  return matches.filter(m => new Date(m.begin_at) >= start);
+}
+
+function filterBySearch(matches, query) {
+  if (!query) return matches;
+  const q = query.toLowerCase();
+  return matches.filter(m => {
+    const t1 = m.opponents?.[0]?.opponent?.name?.toLowerCase() || '';
+    const t2 = m.opponents?.[1]?.opponent?.name?.toLowerCase() || '';
+    const tourney = (m.tournament?.name || m.league?.name || '').toLowerCase();
+    return t1.includes(q) || t2.includes(q) || tourney.includes(q);
+  });
+}
+
+function computeStats(matches) {
+  let total = 0, sweWins = 0, sweLosses = 0;
+  matches.forEach(m => {
+    const t1 = m.opponents?.[0]?.opponent;
+    const t2 = m.opponents?.[1]?.opponent;
+    const t1swe = sweInfo(t1);
+    const t2swe = sweInfo(t2);
+    if (t1swe || t2swe) {
+      total++;
+      if (m.winner) {
+        if ((t1swe && m.winner.id === t1?.id) || (t2swe && m.winner.id === t2?.id)) sweWins++;
+        else sweL osses++;
+      }
+    }
+  });
+  const wr = total > 0 ? Math.round(sweWins / total * 100) : 0;
+  return { total, sweWins, sweLosses: sweL osses, wr: wr + '%' };
+}
+
+function onSearch(q) {
+  searchQuery = q;
+  currentPage = 1;
   renderResults();
 }
 
-function periodStart(period) {
-  const now = new Date();
-  if (period === 'day')   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  if (period === 'week')  { const d = new Date(now); d.setDate(d.getDate() - ((d.getDay()+6)%7)); d.setHours(0,0,0,0); return d; }
-  if (period === 'month') return new Date(now.getFullYear(), now.getMonth(), 1);
-  if (period === '3m')    return new Date(now.getTime() - 90  * 24*60*60*1000);
-  if (period === '6m')    return new Date(now.getTime() - 180 * 24*60*60*1000);
-  if (period === '9m')    return new Date(now.getTime() - 270 * 24*60*60*1000);
-  if (period === 'year')  return new Date(now.getFullYear(), 0, 1);
-  return null;
-}
-
-function matchesSearch(match) {
-  if (!searchQuery) return true;
-  const t1   = match.opponents?.[0]?.opponent?.name?.toLowerCase() || '';
-  const t2   = match.opponents?.[1]?.opponent?.name?.toLowerCase() || '';
-  const tour = (match.tournament?.name || match.league?.name || '').toLowerCase();
-  return t1.includes(searchQuery) || t2.includes(searchQuery) || tour.includes(searchQuery);
-}
-
-function calcStats(matches) {
-  let wins = 0, losses = 0;
-  matches.forEach(m => {
-    if (!m.winner) return;
-    const t1 = m.opponents?.[0]?.opponent;
-    const t2 = m.opponents?.[1]?.opponent;
-    const sweT = sweInfo(t1) ? t1 : sweInfo(t2) ? t2 : null;
-    if (!sweT) return;
-    if (m.winner.id === sweT.id) wins++; else losses++;
-  });
-  return { total: matches.length, wins, losses };
+function setPeriod(p) {
+  activePeriod = p;
+  currentPage = 1;
+  document.querySelectorAll('.period-tab').forEach(btn => btn.classList.remove('active'));
+  event.target.classList.add('active');
+  renderResults();
 }
 
 function renderResults() {
-  const start    = periodStart(activePeriod);
-  const filtered = allMatches.filter(m => {
-    if (!matchesSearch(m)) return false;
-    if (start && new Date(m.end_at || m.begin_at) < start) return false;
-    return true;
-  });
+  let matches = filterByPeriod(allMatches, activePeriod);
+  matches = filterBySearch(matches, searchQuery);
+  matches = matches.sort((a, b) => new Date(b.begin_at) - new Date(a.begin_at));
 
-  const { total, wins, losses } = calcStats(filtered);
-  const wr = (wins + losses) > 0 ? Math.round(wins / (wins + losses) * 100) + '%' : '—';
-  document.getElementById('stat-total').textContent   = total;
-  document.getElementById('stat-wins').textContent    = wins;
-  document.getElementById('stat-losses').textContent  = losses;
-  document.getElementById('stat-winrate').textContent = wr;
+  const stats = computeStats(matches);
+  document.getElementById('stat-total').textContent = stats.total;
+  document.getElementById('stat-wins').textContent = stats.sweWins;
+  document.getElementById('stat-losses').textContent = stats.sweLosses;
+  document.getElementById('stat-winrate').textContent = stats.wr;
 
-  if (!filtered.length) {
+  if (!matches.length) {
     document.getElementById('content').innerHTML = `
-      <div class="state-card"><div class="icon">📂</div><h3>Inga resultat hittades</h3>
-      <p>${searchQuery ? 'Inga matcher för "' + searchQuery + '".' : 'Inga svenska matcher under den här perioden ännu.'}</p></div>`;
+      <div class="state-card">
+        <div class="icon">📊</div>
+        <h3>No Matches Found</h3>
+        <p>No matches match your search or time period.</p>
+      </div>`;
     return;
   }
 
-  // Paginate
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  currentPage      = Math.min(currentPage, totalPages);
-  const pageSlice  = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const totalPages = Math.ceil(matches.length / PAGE_SIZE);
+  if (currentPage > totalPages) currentPage = totalPages;
+  currentPage = Math.max(1, currentPage);
 
-  const groups = {};
-  pageSlice.forEach(m => {
-    const d   = m.end_at ? new Date(m.end_at) : new Date(m.begin_at);
-    const key = d.toLocaleDateString('sv-SE', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(m);
-  });
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const end = start + PAGE_SIZE;
+  const paginated = matches.slice(start, end);
 
   let html = '';
-  Object.entries(groups).forEach(([date, matches], gi) => {
-    html += `<div class="date-group">${date}</div>`;
-    matches.forEach((m, i) => { html += renderResultCard(m, gi * 30 + i * 20); });
+  let lastDate = '';
+
+  paginated.forEach((m, idx) => {
+    const dateKey = new Date(m.begin_at).toLocaleDateString('sv-SE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    if (dateKey !== lastDate) {
+      html += `<div class="date-group">${dateKey}</div>`;
+      lastDate = dateKey;
+    }
+    html += renderCard(m, idx * 30);
   });
 
-  // Pagination controls
-  if (totalPages > 1) {
-    const start = (currentPage - 1) * PAGE_SIZE + 1;
-    const end   = Math.min(currentPage * PAGE_SIZE, filtered.length);
-    html += `<div class="pagination-controls">`;
-    if (currentPage > 1)
-      html += `<button class="page-btn" onclick="goPage(${currentPage - 1})">← Föregående</button>`;
-    html += `<span class="page-info">${start}–${end} av ${filtered.length}</span>`;
-    if (currentPage < totalPages)
-      html += `<button class="page-btn" onclick="goPage(${currentPage + 1})">Nästa →</button>`;
-    html += `</div>`;
-  } else {
-    html += `<div class="pagination-info">${filtered.length} matcher · ${allMatches.length} lagrade i år</div>`;
-  }
+  html += `
+    <div class="pagination-info">Showing ${start + 1}–${Math.min(end, matches.length)} of ${matches.length}</div>
+    <div class="pagination-controls">
+      <button class="page-btn" onclick="goPrevPage()" ${currentPage === 1 ? 'disabled' : ''}>← Previous</button>
+      <div class="page-info">Page ${currentPage} / ${totalPages}</div>
+      <button class="page-btn" onclick="goNextPage(${totalPages})" ${currentPage >= totalPages ? 'disabled' : ''}>Next →</button>
+    </div>`;
 
   document.getElementById('content').innerHTML = html;
 }
 
-function goPage(p) {
-  currentPage = p;
-  renderResults();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+function goPrevPage() {
+  if (currentPage > 1) {
+    currentPage--;
+    renderResults();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 }
 
-function renderResultCard(match, delay) {
-  const t1    = match.opponents?.[0]?.opponent;
-  const t2    = match.opponents?.[1]?.opponent;
+function goNextPage(totalPages) {
+  if (currentPage < totalPages) {
+    currentPage++;
+    renderResults();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+function renderCard(match, delay) {
+  const t1 = match.opponents?.[0]?.opponent;
+  const t2 = match.opponents?.[1]?.opponent;
   const t1swe = sweInfo(t1);
   const t2swe = sweInfo(t2);
   const { t1Maps, t2Maps } = extractMapScore(match);
-  const t1Win  = match.winner?.id === t1?.id;
-  const t2Win  = match.winner?.id === t2?.id;
-  const d          = match.end_at ? new Date(match.end_at) : new Date(match.begin_at);
-  const timeStr    = d.toLocaleTimeString('sv-SE', { hour:'2-digit', minute:'2-digit' });
+  const t1Win = match.winner?.id === t1?.id;
+  const t2Win = match.winner?.id === t2?.id;
   const tournament = match.tournament?.name || match.league?.name || 'CS2';
-  const bo         = match.number_of_games ? 'BO' + match.number_of_games : '';
-  const cardId     = 'rc-' + match.id;
-
-  // Determine if this match is a win or loss for Swedish team
-  let matchResult = '';
-  if (match.winner) {
-    const sweT = t1swe ? t1 : t2swe ? t2 : null;
-    if (sweT && match.winner.id === sweT.id) {
-      matchResult = 'won';
-    } else if (sweT) {
-      matchResult = 'lost';
-    }
-  }
-
-  const logo = t => t?.image_url
-    ? `<img class="rt-logo" src="${t.image_url}" alt="${t.name || ''}" onerror="this.style.display='none'" />`
-    : `<div class="rt-logo-ph">${(t?.name || '?')[0].toUpperCase()}</div>`;
-
-  const t1Class = ['rt-name', t1swe ? 'swe-hl' : (t1Win ? 'winner' : t2Win ? 'loser' : '')].filter(Boolean).join(' ');
-  const t2Class = ['rt-name', t2swe ? 'swe-hl' : (t2Win ? 'winner' : t1Win ? 'loser' : '')].filter(Boolean).join(' ');
+  const timeStr = new Date(match.begin_at).toLocaleString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+  const dateStr = new Date(match.begin_at).toLocaleDateString('sv-SE', { month: 'short', day: 'numeric' });
 
   return `
-  <div class="result-card ${matchResult}" style="animation-delay:${delay}ms" id="${cardId}">
+  <div class="result-card ${t1Win ? 'won' : t2Win ? 'lost' : ''}" style="animation-delay:${delay}ms">
     <div class="result-card__row">
-      <div class="result-date">${timeStr}</div>
+      <div class="result-date">${dateStr} ${timeStr}</div>
       <div class="result-tournament" title="${tournament}">${tournament}</div>
       <div class="result-teams">
         <div class="rt">
-          <div class="rt-namerow">${logo(t1)}<span class="${t1Class}">${t1?.name || 'TBD'}</span></div>
-          <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:2px">
-            ${swePill(t1swe)}${!t1swe ? teamLocationBadge(t1) : ''}
-          </div>
+          <div class="rt-namerow">${teamLogo(t1)}<span class="rt-name${t1Win ? ' winner' : ''}${t1swe ? ' swe-hl' : ''}">${t1?.name || 'TBD'}</span></div>
+          ${swePill(t1swe)}
         </div>
         <div class="result-score">
-          <div class="rs-main">
-            <span style="color:${t1Win ? 'var(--accent2)' : t2Win ? 'var(--muted)' : '#fff'}">${t1Maps}</span>
-            <span style="color:var(--muted)">:</span>
-            <span style="color:${t2Win ? 'var(--accent2)' : t1Win ? 'var(--muted)' : '#fff'}">${t2Maps}</span>
-          </div>
-          <div class="rs-label">${bo}</div>
+          <div class="rs-main"><span style="color:${t1Win ? 'var(--success)' : t2Win ? 'var(--text-secondary)' : '#fff'}">${t1Maps}</span> : <span style="color:${t2Win ? 'var(--success)' : t1Win ? 'var(--text-secondary)' : '#fff'}">${t2Maps}</span></div>
+          <div class="rs-label">BO${match.number_of_games || '?'}</div>
         </div>
         <div class="rt right">
-          <div class="rt-namerow">${logo(t2)}<span class="${t2Class}">${t2?.name || 'TBD'}</span></div>
-          <div style="display:flex;gap:5px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin-top:2px">
-            ${!t2swe ? teamLocationBadge(t2) : ''}${swePill(t2swe, 'right')}
-          </div>
+          <div class="rt-namerow">${teamLogo(t2)}<span class="rt-name${t2Win ? ' winner' : ''}${t2swe ? ' swe-hl' : ''}">${t2?.name || 'TBD'}</span></div>
+          ${swePill(t2swe, 'right')}
         </div>
       </div>
     </div>
   </div>`;
 }
-
 </script>
 </body>
 </html>
