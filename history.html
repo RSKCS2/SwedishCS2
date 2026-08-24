@@ -58,9 +58,13 @@
     .stat-label{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)}
 
     /* ── RESULT CARD ── */
-    .result-card{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:6px;margin-bottom:8px;overflow:hidden;transition:border-color .2s;animation:cardIn .4s ease-out forwards}
+    .result-card{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:6px;margin-bottom:8px;overflow:hidden;transition:border-color .2s;animation:cardIn .4s ease-out forwards}
+    .result-card.won{border-left-color:var(--accent2)}
+    .result-card.lost{border-left-color:var(--red)}
     @keyframes cardIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
     .result-card:hover{border-color:rgba(240,208,0,.3)}
+    .result-card.won:hover{border-color:rgba(0,229,160,.3)}
+    .result-card.lost:hover{border-color:rgba(255,61,90,.3)}
     .result-card__row{display:flex;align-items:center;padding:14px 18px;gap:14px}
     .result-date{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:48px;white-space:nowrap}
     .result-tournament{font-family:var(--display);font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);min-width:120px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -404,16 +408,26 @@ function renderResultCard(match, delay) {
   const bo         = match.number_of_games ? 'BO' + match.number_of_games : '';
   const cardId     = 'rc-' + match.id;
 
+  // Determine if this match is a win or loss for Swedish team
+  let matchResult = '';
+  if (match.winner) {
+    const sweT = t1swe ? t1 : t2swe ? t2 : null;
+    if (sweT && match.winner.id === sweT.id) {
+      matchResult = 'won';
+    } else if (sweT) {
+      matchResult = 'lost';
+    }
+  }
+
   const logo = t => t?.image_url
     ? `<img class="rt-logo" src="${t.image_url}" alt="${t.name || ''}" onerror="this.style.display='none'" />`
     : `<div class="rt-logo-ph">${(t?.name || '?')[0].toUpperCase()}</div>`;
-  let mapsHtml = '';
 
   const t1Class = ['rt-name', t1swe ? 'swe-hl' : (t1Win ? 'winner' : t2Win ? 'loser' : '')].filter(Boolean).join(' ');
   const t2Class = ['rt-name', t2swe ? 'swe-hl' : (t2Win ? 'winner' : t1Win ? 'loser' : '')].filter(Boolean).join(' ');
 
   return `
-  <div class="result-card" style="animation-delay:${delay}ms" id="${cardId}">
+  <div class="result-card ${matchResult}" style="animation-delay:${delay}ms" id="${cardId}">
     <div class="result-card__row">
       <div class="result-date">${timeStr}</div>
       <div class="result-tournament" title="${tournament}">${tournament}</div>
