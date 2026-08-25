@@ -122,8 +122,15 @@ async function verifyTurnstileToken(token, secret, remoteIp) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body:    new URLSearchParams({ secret, response: token, remoteip: remoteIp || '' }),
   });
-  if (!res.ok) return { success: false, 'error-codes': [`siteverify-http-${res.status}`] };
-  return res.json();
+  const raw = await res.text();
+  if (!res.ok) {
+    return { success: false, 'error-codes': [`siteverify-http-${res.status}`], _rawBody: raw };
+  }
+  try {
+    return JSON.parse(raw);
+  } catch(_) {
+    return { success: false, 'error-codes': ['siteverify-non-json-response'], _rawBody: raw };
+  }
 }
 
 async function isAuthorized(request, env) {
@@ -435,6 +442,7 @@ async function handleFetch(request, env) {
       return new Response(JSON.stringify({
         error: 'Turnstile verification failed',
         errorCodes: verifyData['error-codes'] || [],
+        rawBody: verifyData._rawBody || null,
       }), {
         status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
       });
