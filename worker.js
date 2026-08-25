@@ -122,9 +122,8 @@ async function verifyTurnstileToken(token, secret, remoteIp) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body:    new URLSearchParams({ secret, response: token, remoteip: remoteIp || '' }),
   });
-  if (!res.ok) return false;
-  const data = await res.json();
-  return !!data.success;
+  if (!res.ok) return { success: false, 'error-codes': [`siteverify-http-${res.status}`] };
+  return res.json();
 }
 
 async function isAuthorized(request, env) {
@@ -419,9 +418,14 @@ async function handleFetch(request, env) {
     }
 
     const remoteIp = request.headers.get('CF-Connecting-IP') || '';
-    const verified = await verifyTurnstileToken(turnstileToken, env.TURNSTILE_SECRET, remoteIp);
-    if (!verified) {
-      return new Response(JSON.stringify({ error: 'Turnstile verification failed' }), {
+    const verifyData = await verifyTurnstileToken(turnstileToken, env.TURNSTILE_SECRET, remoteIp);
+    if (!verifyData.success) {
+      // TEMPORARY: echoing Turnstile's error codes back to diagnose the 403.
+      // Remove the errorCodes field once this is confirmed working.
+      return new Response(JSON.stringify({
+        error: 'Turnstile verification failed',
+        errorCodes: verifyData['error-codes'] || [],
+      }), {
         status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
       });
     }
