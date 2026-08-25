@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html class="dark" lang="sv">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SweCS2 · Teams</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@100..900&family=JetBrains+Mono:wght@100..900&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script src="tailwind-config.js"></script>
+<link rel="stylesheet" href="theme.css" />
+</head>
+<body class="bg-background text-on-surface font-body-md min-h-screen flex flex-col">
+
+<nav class="bg-surface/80 backdrop-blur-xl full-width top-0 sticky z-50 border-b border-outline-variant/20">
+  <div class="flex justify-between items-center w-full px-container-padding max-w-[1200px] mx-auto h-16">
+    <div class="flex items-center gap-8">
+      <a href="./" class="font-headline-lg text-headline-lg font-extrabold text-swedish-gold tracking-tighter flex items-center gap-2">
+        <svg width="22" height="22" viewBox="0 0 32 32" class="shrink-0"><rect width="32" height="32" rx="6" fill="#002244"/><rect y="12" width="32" height="8" fill="#E6C200"/><rect x="12" width="8" height="32" fill="#E6C200"/></svg>
+        SweCS2
+      </a>
+      <div class="hidden md:flex gap-6">
+        <a class="nav-link text-on-surface-variant font-medium hover:text-swedish-gold transition-colors duration-200" href="./">Live Scores</a>
+        <a class="nav-link text-on-surface-variant font-medium hover:text-swedish-gold transition-colors duration-200" href="history">Results</a>
+        <a class="nav-link text-swedish-gold font-bold border-b-2 border-swedish-gold pb-1" href="teams" aria-current="page">Teams</a>
+        <a class="nav-link text-on-surface-variant font-medium hover:text-swedish-gold transition-colors duration-200" href="players">Players</a>
+      </div>
+    </div>
+    <div class="relative hidden md:block">
+      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+      <input id="team-search" type="text" autocomplete="off"
+        class="bg-surface-container-high border border-outline-variant/30 rounded-full py-1.5 pl-9 pr-4 text-sm text-on-surface focus:outline-none focus:border-swedish-gold w-64"
+        placeholder="Search teams…" oninput="onTeamSearch(this.value)" />
+    </div>
+  </div>
+</nav>
+
+<div class="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-stack-md flex flex-col gap-gutter">
+  <main class="flex-grow flex flex-col gap-stack-md">
+    <header class="flex justify-between items-end border-b border-outline-variant/20 pb-4">
+      <div>
+        <span class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest block mb-1">Counter-Strike 2</span>
+        <h1 class="font-display-lg text-display-lg text-on-surface">Swedish Teams</h1>
+      </div>
+    </header>
+
+    <div id="content" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-gutter">
+      <div class="flex flex-col items-center justify-center py-24 col-span-full">
+        <div class="spinner"></div>
+        <p class="font-metadata text-metadata text-on-surface-variant">Loading teams…</p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<footer class="bg-surface-container-lowest full-width mt-stack-lg border-t border-outline-variant/30">
+  <div class="w-full py-stack-lg px-container-padding max-w-[1200px] mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+    <div class="font-headline-lg-mobile text-headline-lg-mobile text-swedish-gold font-bold">SweCS2</div>
+    <div class="flex flex-wrap justify-center gap-6">
+      <a class="text-on-surface-variant font-metadata text-metadata hover:text-on-surface transition-colors opacity-80 hover:opacity-100" href="./">Live</a>
+      <a class="text-on-surface-variant font-metadata text-metadata hover:text-on-surface transition-colors opacity-80 hover:opacity-100" href="history">Results</a>
+      <a class="text-on-surface-variant font-metadata text-metadata hover:text-on-surface transition-colors opacity-80 hover:opacity-100" href="players">Players</a>
+    </div>
+    <div class="text-tertiary font-metadata text-metadata text-sm text-center md:text-right">TRACKING SWEDISH CS2 TALENT</div>
+  </div>
+</footer>
+
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<div id="turnstile-container"></div>
+<script src="shared.js"></script>
+<script>
+let allTeams = [];
+let teamQuery = '';
+
+window.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const matches = await ensureMatchHistory();
+    const profiles = buildTeamProfiles(matches);
+
+    // Include Swedish teams from the roster feed even if they have no
+    // cached match history yet, so a new/quiet squad still shows up.
+    getSwedishTeamIds().forEach(id => {
+      if (!profiles[id]) {
+        const info = sweInfo({ id });
+        profiles[id] = { id, name: info?.name || 'Unknown Team', logo: null, matches: [], wins3m: 0, losses3m: 0 };
+      }
+    });
+
+    allTeams = Object.values(profiles).sort((a, b) => (b.matches.length - a.matches.length));
+    renderTeams();
+  } catch(err) {
+    console.error('[SWE CS2] Teams fetch error:', err);
+    document.getElementById('content').innerHTML = `
+      <div class="flex flex-col items-center justify-center py-24 text-center gap-3 col-span-full">
+        <span class="material-symbols-outlined text-5xl text-on-surface-variant/50">wifi_off</span>
+        <h3 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Connection Error</h3>
+        <p class="font-body-md text-body-md text-on-surface-variant">Unable to load team data.</p>
+      </div>`;
+  }
+});
+
+function onTeamSearch(q) {
+  teamQuery = q.toLowerCase();
+  renderTeams();
+}
+
+function renderTeams() {
+  const filtered = teamQuery ? allTeams.filter(t => (t.name || '').toLowerCase().includes(teamQuery)) : allTeams;
+
+  if (!filtered.length) {
+    document.getElementById('content').innerHTML = `
+      <div class="flex flex-col items-center justify-center py-24 text-center gap-3 col-span-full">
+        <span class="material-symbols-outlined text-5xl text-on-surface-variant/50">groups</span>
+        <h3 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">No Teams Found</h3>
+        <p class="font-body-md text-body-md text-on-surface-variant">Try a different search.</p>
+      </div>`;
+    return;
+  }
+
+  document.getElementById('content').innerHTML = filtered.map(renderTeamCard).join('');
+}
+
+function renderTeamCard(team) {
+  const info = sweInfo({ id: team.id }) || {};
+  const squadLabel = info.isFull ? 'Full Squad' : info.count ? info.count + '/5 Swedish' : '';
+  const recent = team.matches.slice(0, 3);
+
+  const recentHtml = recent.length
+    ? recent.map(m => `
+      <div class="flex justify-between items-center text-sm">
+        <span class="text-on-surface w-24 truncate">vs ${m.oppName}</span>
+        <span class="font-bold ${m.won ? 'text-swedish-gold' : 'text-on-surface-variant'}">${m.selfMaps} - ${m.oppMaps}</span>
+        <span class="${m.won ? 'text-tertiary' : 'text-error'} font-bold w-4 text-right">${m.won ? 'W' : 'L'}</span>
+      </div>`).join('')
+    : `<div class="text-sm text-on-surface-variant">No recorded matches yet.</div>`;
+
+  return `
+  <article class="bg-surface-container border border-outline-variant/20 rounded-xl p-4 flex flex-col gap-4 glow-card transition-all duration-300 relative overflow-hidden group">
+    <div class="absolute inset-0 bg-gradient-to-br from-swedish-gold/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+    <div class="flex justify-between items-start z-10">
+      <div class="flex items-center gap-4 min-w-0">
+        <div class="w-16 h-16 bg-surface rounded flex items-center justify-center border border-outline-variant/30 p-2 shrink-0">
+          ${teamLogo({ image_url: team.logo, name: team.name }, 'max-w-full max-h-full object-contain')}
+        </div>
+        <div class="min-w-0">
+          <h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-bold truncate">${team.name}</h2>
+          <p class="font-metadata text-metadata text-on-surface-variant flex items-center gap-1">🇸🇪 Sweden</p>
+        </div>
+      </div>
+      ${squadLabel ? `<div class="text-right shrink-0"><span class="font-label-caps text-label-caps text-swedish-gold block">Squad</span><span class="font-bold text-sm text-on-surface">${squadLabel}</span></div>` : ''}
+    </div>
+    <div class="bg-surface-container-highest rounded-lg p-3 z-10 mt-2 border border-outline-variant/10">
+      <span class="font-label-caps text-label-caps text-on-surface-variant block mb-2">Recent Matches</span>
+      <div class="flex flex-col gap-2">${recentHtml}</div>
+      <div class="mt-3 pt-3 border-t border-outline-variant/10 flex justify-between items-center">
+        <span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Past 3 Months</span>
+        <span class="font-bold text-sm text-on-surface">${team.wins3m}W - ${team.losses3m}L</span>
+      </div>
+    </div>
+  </article>`;
+}
+</script>
+</body>
+</html>

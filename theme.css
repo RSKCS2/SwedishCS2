@@ -1,0 +1,70 @@
+/* theme.css — shared across index.html, history.html, teams.html, players.html
+   Small, hand-written rules that sit on top of the Tailwind config in
+   tailwind-config.js. Keep this file tiny; anything expressible as a
+   Tailwind utility class belongs in the markup instead. */
+
+body {
+  background-color: #111417;
+  color: #e1e2e7;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.material-symbols-outlined.fill {
+  font-variation-settings: 'FILL' 1;
+}
+
+.glow-active {
+  box-shadow: 0 0 12px rgba(230, 194, 0, 0.3);
+}
+
+.glow-card {
+  box-shadow: 0 0 20px 0px rgba(230, 194, 0, 0.15);
+}
+
+.glow-card:hover,
+.glow-outline:hover {
+  box-shadow: 0 0 15px 2px rgba(230, 194, 0, 0.2);
+  border-color: #E6C200;
+}
+
+.match-card:hover {
+  border-color: #E6C200;
+  box-shadow: 0 0 12px 0 rgba(230, 194, 0, 0.4);
+  transition: all 0.2s ease-in-out;
+}
+
+@keyframes swe-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.live-pulse {
+  animation: swe-pulse 1.6s infinite;
+}
+
+@keyframes swe-spin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #43474f;
+  border-top-color: #E6C200;
+  border-radius: 50%;
+  animation: swe-spin 0.8s linear infinite;
+  margin: 0 auto 24px;
+}
+
+/* Turnstile runs invisibly in the background */
+#turnstile-container { display: none; }
+
+/* nav underline for the active page, set via aria-current in markup */
+.nav-link[aria-current="page"] {
+  color: #E6C200;
+  font-weight: 700;
+  border-bottom: 2px solid #E6C200;
+}

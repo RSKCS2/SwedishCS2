@@ -151,22 +151,25 @@ async function gridFetch(endpoint, query, variables = {}) {
 
 // ── SWEDISH PLAYER DATA ───────────────────────────────────────────────────
 let _sweTeamData = {};
+let _swePlayers  = [];
 let _sweLoaded   = false;
 
 async function ensureSwedishData() {
   if (_sweLoaded) return;
 
   // Try cache first (1 hour TTL)
-  const cached = cacheGet('swe_players', 6 * 60 * 60 * 1000);
-  if (cached) { _sweTeamData = cached; _sweLoaded = true; return; }
+  const cached = cacheGet('swe_players_v2', 6 * 60 * 60 * 1000);
+  if (cached) { _sweTeamData = cached.teams || {}; _swePlayers = cached.players || []; _sweLoaded = true; return; }
 
   try {
     _sweTeamData = {};
+    _swePlayers  = [];
     let page = 1;
     while (true) {
       const players = await pandaFetch(`/csgo/players?filter[nationality]=SE&per_page=100&page=${page}`);
       if (!players.length) break;
       players.forEach(p => {
+        _swePlayers.push(p);
         const tid = p.current_team?.id;
         if (!tid) return;
         if (!_sweTeamData[tid]) _sweTeamData[tid] = { count: 0, isFull: false, name: p.current_team?.name };
@@ -176,7 +179,7 @@ async function ensureSwedishData() {
       page++;
     }
     Object.values(_sweTeamData).forEach(d => { d.isFull = d.count >= 5; });
-    cacheSet('swe_players', _sweTeamData);
+    cacheSet('swe_players_v2', { teams: _sweTeamData, players: _swePlayers });
   } catch(e) { console.warn('[SWE] Failed to load Swedish player data:', e); }
   _sweLoaded = true;
 }
@@ -187,6 +190,72 @@ function sweInfo(team) {
 
 function hasSweTeam(match) {
   return !!(sweInfo(match.opponents?.[0]?.opponent) || sweInfo(match.opponents?.[1]?.opponent));
+}
+
+function getSwedishPlayers() {
+  return _swePlayers;
+}
+
+function getSwedishTeamIds() {
+  return Object.keys(_sweTeamData);
+}
+
+// ── TEAM MATCH HISTORY (shared by history.html and teams.html) ────────────
+async function ensureMatchHistory() {
+  const CACHE_VERSION     = 'v3';
+  const HISTORY_KEY       = 'swe_history_' + CACHE_VERSION;
+  const HISTORY_FETCH_KEY = 'swe_history_fetched_' + CACHE_VERSION;
+  const HISTORY_STALE_MS  = 2 * 60 * 60 * 1000;
+
+  await ensureSwedishData();
+  let matches = (cacheGet(HISTORY_KEY) || []).filter(m => m.begin_at && m.opponents?.length === 2);
+
+  const lastFetch = parseInt(localStorage.getItem(HISTORY_FETCH_KEY) || '0', 10);
+  const isStale   = Date.now() - lastFetch > HISTORY_STALE_MS;
+  if (isStale || !matches.length) {
+    try {
+      const pastList = await pandaFetch('/csgo/matches/past?per_page=100&include=opponents,results,games,winner');
+      const fetched  = pastList.filter(m => m.opponents?.length === 2 && (sweInfo(m.opponents[0]?.opponent) || sweInfo(m.opponents[1]?.opponent)));
+      const seen = new Set();
+      matches = [...fetched, ...matches].filter(m => {
+        if (seen.has(m.id)) return false;
+        seen.add(m.id);
+        return true;
+      });
+      cacheSet(HISTORY_KEY, matches);
+      localStorage.setItem(HISTORY_FETCH_KEY, Date.now().toString());
+    } catch(e) { console.warn('[SWE] Failed to load match history:', e); }
+  }
+  return matches;
+}
+
+// Builds a per-Swedish-team profile (logo, recent form, 3-month record) from
+// cached/fetched match history. Used by teams.html.
+function buildTeamProfiles(matches) {
+  const profiles = {};
+  const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 3);
+
+  matches.forEach(m => {
+    const t1 = m.opponents?.[0]?.opponent;
+    const t2 = m.opponents?.[1]?.opponent;
+    [[t1, t2], [t2, t1]].forEach(([self, opp]) => {
+      if (!self?.id || !sweInfo(self)) return;
+      if (!profiles[self.id]) {
+        profiles[self.id] = { id: self.id, name: self.name, logo: self.image_url || null, matches: [], wins3m: 0, losses3m: 0 };
+      }
+      const p = profiles[self.id];
+      if (self.image_url) p.logo = self.image_url;
+      const { t1Maps, t2Maps } = extractMapScore(m);
+      const selfMaps = self.id === t1?.id ? t1Maps : t2Maps;
+      const oppMaps  = self.id === t1?.id ? t2Maps : t1Maps;
+      const won = m.winner?.id === self.id;
+      p.matches.push({ oppName: opp?.name || 'TBD', selfMaps, oppMaps, won, date: m.begin_at });
+      if (new Date(m.begin_at) >= cutoff) { if (won) p.wins3m++; else p.losses3m++; }
+    });
+  });
+
+  Object.values(profiles).forEach(p => p.matches.sort((a, b) => new Date(b.date) - new Date(a.date)));
+  return profiles;
 }
 
 // ── GRID QUERIES ──────────────────────────────────────────────────────────

@@ -1,988 +1,145 @@
 <!DOCTYPE html>
-<html lang="sv">
+<html class="dark" lang="sv">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SWE CS2 · Match History</title>
-  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-  <style>
-    :root {
-      --bg: #0f0f0f;
-      --bg-secondary: #1a1a1a;
-      --bg-tertiary: #252525;
-      --border: #333;
-      --text-primary: #fff;
-      --text-secondary: #b0b0b0;
-      --accent-primary: #ff6b35;
-      --accent-secondary: #00d9ff;
-      --success: #00d9ff;
-      --danger: #ff3e42;
-      --warning: #ffd700;
-    }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      background: var(--bg);
-      color: var(--text-primary);
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      font-size: 16px;
-      line-height: 1.6;
-      min-height: 100vh;
-    }
-
-    body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background-image: 
-        repeating-linear-gradient(0deg, rgba(255,107,53,.03) 0px, rgba(255,107,53,.03) 1px, transparent 1px, transparent 2px),
-        repeating-linear-gradient(90deg, rgba(255,107,53,.03) 0px, rgba(255,107,53,.03) 1px, transparent 1px, transparent 2px);
-      background-size: 50px 50px;
-      pointer-events: none;
-      z-index: 0;
-    }
-
-    /* ── HEADER ── */
-    header {
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-secondary) 90%, transparent 100%);
-      backdrop-filter: blur(20px);
-      border-bottom: 1px solid var(--border);
-      padding: 0 32px;
-    }
-
-    .header-content {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      max-width: 1400px;
-      margin: 0 auto;
-      height: 72px;
-      gap: 40px;
-    }
-
-    .logo {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      text-decoration: none;
-      flex-shrink: 0;
-    }
-
-    .logo-flag {
-      width: 32px;
-      height: 32px;
-    }
-
-    .logo-text {
-      font-size: 28px;
-      font-weight: 900;
-      letter-spacing: -1px;
-      color: var(--text-primary);
-    }
-
-    .logo-text span {
-      color: var(--accent-primary);
-    }
-
-    nav {
-      display: flex;
-      gap: 8px;
-      flex: 1;
-    }
-
-    nav a {
-      font-size: 15px;
-      font-weight: 600;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      color: var(--text-secondary);
-      text-decoration: none;
-      padding: 8px 20px;
-      border-radius: 6px;
-      border: 1px solid transparent;
-      transition: all 0.2s ease;
-      cursor: pointer;
-    }
-
-    nav a:hover {
-      color: var(--text-primary);
-      background: rgba(255, 107, 53, 0.1);
-      border-color: rgba(255, 107, 53, 0.3);
-    }
-
-    nav a.active {
-      color: var(--accent-primary);
-      background: rgba(255, 107, 53, 0.15);
-      border-color: var(--accent-primary);
-    }
-
-    /* ── MAIN ── */
-    main {
-      position: relative;
-      z-index: 1;
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: 40px 32px 60px;
-    }
-
-    .page-title {
-      font-size: 32px;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-      color: var(--text-primary);
-      margin-bottom: 40px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .page-title::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: linear-gradient(90deg, var(--border) 0%, transparent 100%);
-    }
-
-    /* ── CONTROLS ── */
-    .controls {
-      display: flex;
-      gap: 16px;
-      margin-bottom: 32px;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-
-    .search-wrap {
-      flex: 1;
-      min-width: 200px;
-      max-width: 320px;
-      position: relative;
-    }
-
-    .search-wrap::before {
-      content: '🔍';
-      position: absolute;
-      left: 12px;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 16px;
-      pointer-events: none;
-    }
-
-    #search-input {
-      width: 100%;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      color: var(--text-primary);
-      font-family: inherit;
-      font-size: 15px;
-      padding: 10px 12px 10px 40px;
-      border-radius: 6px;
-      outline: none;
-      transition: all 0.2s ease;
-    }
-
-    #search-input:focus {
-      border-color: var(--accent-primary);
-      background: var(--bg-tertiary);
-    }
-
-    #search-input::placeholder {
-      color: var(--text-secondary);
-    }
-
-    /* ── STATS SECTION ── */
-    .stats-section {
-      margin-bottom: 40px;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
-
-    .period-tabs {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .period-tab {
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      padding: 10px 16px;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--text-secondary);
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .period-tab:hover {
-      color: var(--text-primary);
-      border-color: var(--accent-primary);
-      background: rgba(255, 107, 53, 0.05);
-    }
-
-    .period-tab.active {
-      color: var(--text-primary);
-      background: rgba(255, 107, 53, 0.15);
-      border-color: var(--accent-primary);
-    }
-
-    .custom-range {
-      display: none;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .custom-range.open {
-      display: flex;
-    }
-
-    .custom-range label {
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      color: var(--text-secondary);
-    }
-
-    .custom-range input[type="date"] {
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text-primary);
-      font-family: inherit;
-      font-size: 14px;
-      padding: 8px 10px;
-      color-scheme: dark;
-    }
-
-    .custom-range input[type="date"]:focus {
-      outline: none;
-      border-color: var(--accent-primary);
-    }
-
-    .custom-range button {
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      padding: 9px 16px;
-      border-radius: 6px;
-      border: 1px solid var(--accent-primary);
-      background: rgba(255, 107, 53, 0.15);
-      color: var(--text-primary);
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .custom-range button:hover {
-      background: rgba(255, 107, 53, 0.25);
-    }
-
-    .custom-range .clear-range {
-      border-color: var(--border);
-      background: transparent;
-      color: var(--text-secondary);
-    }
-
-    .custom-range .clear-range:hover {
-      color: var(--text-primary);
-      border-color: var(--text-secondary);
-      background: transparent;
-    }
-
-    .stats-bar {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 12px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-
-    .stat-item {
-      padding: 24px;
-      background: var(--bg-secondary);
-      text-align: center;
-      border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .stat-item:last-child {
-      border-right: none;
-    }
-
-    .stat-value {
-      font-size: 32px;
-      font-weight: 900;
-      line-height: 1;
-      letter-spacing: -1px;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .stat-value.green {
-      color: var(--success);
-    }
-
-    .stat-value.yellow {
-      color: var(--warning);
-    }
-
-    .stat-value.red {
-      color: var(--danger);
-    }
-
-    .stat-label {
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      color: var(--text-secondary);
-    }
-
-    /* ── RESULT CARD ── */
-    .result-card {
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-left: 4px solid var(--accent-primary);
-      border-radius: 8px;
-      margin-bottom: 12px;
-      overflow: hidden;
-      transition: all 0.3s ease;
-      animation: slideIn 0.5s ease-out backwards;
-    }
-
-    @keyframes slideIn {
-      from {
-        opacity: 0;
-        transform: translateY(12px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    .result-card.won {
-      border-left-color: var(--success);
-    }
-
-    .result-card.lost {
-      border-left-color: var(--danger);
-    }
-
-    .result-card:hover {
-      border-color: var(--accent-primary);
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(255, 107, 53, 0.15);
-    }
-
-    .result-card.won:hover {
-      border-color: var(--success);
-      box-shadow: 0 8px 24px rgba(0, 217, 255, 0.15);
-    }
-
-    .result-card.lost:hover {
-      border-color: var(--danger);
-      box-shadow: 0 8px 24px rgba(255, 62, 66, 0.15);
-    }
-
-    .result-card__row {
-      display: flex;
-      align-items: center;
-      padding: 20px;
-      gap: 20px;
-    }
-
-    .result-date {
-      font-size: 13px;
-      font-weight: 700;
-      color: var(--text-secondary);
-      min-width: 80px;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-    }
-
-    .result-tournament {
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      color: var(--accent-primary);
-      min-width: 140px;
-      max-width: 160px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .result-teams {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      min-width: 0;
-    }
-
-    .rt {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      flex: 1;
-      min-width: 0;
-    }
-
-    .rt.right {
-      align-items: flex-end;
-    }
-
-    .rt-namerow {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .rt.right .rt-namerow {
-      flex-direction: row-reverse;
-    }
-
-    .rt-logo {
-      width: 40px;
-      height: 40px;
-      object-fit: contain;
-      background: var(--bg-tertiary);
-      border-radius: 6px;
-      padding: 4px;
-      flex-shrink: 0;
-      border: 1px solid var(--border);
-    }
-
-    .rt-logo-ph {
-      width: 40px;
-      height: 40px;
-      background: var(--bg-tertiary);
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      font-weight: 700;
-      color: var(--text-secondary);
-      flex-shrink: 0;
-      border: 1px solid var(--border);
-    }
-
-    .rt-name {
-      font-size: 18px;
-      font-weight: 700;
-      letter-spacing: -0.5px;
-      color: var(--text-primary);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .rt-name.winner {
-      color: var(--success);
-      font-weight: 900;
-    }
-
-    .rt-name.loser {
-      color: var(--text-secondary);
-    }
-
-    .rt-name.swe-hl {
-      color: var(--success);
-      font-weight: 900;
-    }
-
-    .swe-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.4px;
-      text-transform: uppercase;
-      padding: 4px 10px;
-      border-radius: 4px;
-      border: 1px solid;
-      white-space: nowrap;
-    }
-
-    .swe-pill.full {
-      background: rgba(0, 217, 255, 0.15);
-      border-color: rgba(0, 217, 255, 0.4);
-      color: var(--success);
-    }
-
-    .swe-pill.majority {
-      background: rgba(100, 149, 237, 0.15);
-      border-color: rgba(100, 149, 237, 0.4);
-      color: #7aabff;
-    }
-
-    .swe-pill.partial {
-      background: rgba(255, 215, 0, 0.15);
-      border-color: rgba(255, 215, 0, 0.4);
-      color: var(--warning);
-    }
-
-    .location-badge {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text-secondary);
-      letter-spacing: 0.4px;
-      text-transform: uppercase;
-      margin-top: 4px;
-    }
-
-    .result-score {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
-      min-width: 80px;
-      flex-shrink: 0;
-      padding: 0 12px;
-    }
-
-    .rs-main {
-      font-size: 28px;
-      font-weight: 900;
-      line-height: 1;
-      font-variant-numeric: tabular-nums;
-      letter-spacing: -1px;
-    }
-
-    .rs-label {
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      color: var(--text-secondary);
-    }
-
-    /* ── DATE GROUP ── */
-    .date-group {
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.8px;
-      text-transform: uppercase;
-      color: var(--text-secondary);
-      padding: 32px 0 16px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-top: 24px;
-      border-top: 1px solid var(--border);
-    }
-
-    .date-group::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--border);
-    }
-
-    /* ── STATES ── */
-    .state-card {
-      text-align: center;
-      padding: 80px 40px;
-      color: var(--text-secondary);
-    }
-
-    .state-card .icon {
-      font-size: 64px;
-      margin-bottom: 24px;
-      opacity: 0.5;
-    }
-
-    .state-card h3 {
-      font-size: 28px;
-      font-weight: 700;
-      color: var(--text-primary);
-      margin-bottom: 12px;
-      letter-spacing: -0.5px;
-    }
-
-    .state-card p {
-      font-size: 16px;
-      line-height: 1.6;
-      max-width: 500px;
-      margin: 0 auto;
-    }
-
-    .spinner {
-      width: 40px;
-      height: 40px;
-      border: 3px solid var(--border);
-      border-top-color: var(--accent-primary);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin: 0 auto 24px;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    /* ── PAGINATION ── */
-    .pagination-info {
-      font-size: 13px;
-      color: var(--text-secondary);
-      text-align: center;
-      padding: 20px 0;
-      letter-spacing: 0.5px;
-    }
-
-    .pagination-controls {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 16px;
-      padding: 32px 0;
-    }
-
-    .page-btn {
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      color: var(--text-primary);
-      padding: 10px 20px;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .page-btn:hover:not(:disabled) {
-      border-color: var(--accent-primary);
-      color: var(--accent-primary);
-      background: rgba(255, 107, 53, 0.1);
-    }
-
-    .page-btn:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-
-    .page-info {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text-secondary);
-      min-width: 100px;
-      text-align: center;
-    }
-
-    /* ── RESPONSIVE ── */
-    @media (max-width: 1024px) {
-      main {
-        padding: 32px 24px 60px;
-      }
-
-      .result-card__row {
-        padding: 16px;
-        gap: 16px;
-      }
-
-      .rt-name {
-        font-size: 16px;
-      }
-
-      .stats-bar {
-        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-      }
-    }
-
-    @media (max-width: 768px) {
-      header {
-        padding: 0 16px;
-      }
-
-      .header-content {
-        height: 60px;
-        gap: 16px;
-      }
-
-      .logo-text {
-        font-size: 22px;
-      }
-
-      nav {
-        display: none;
-      }
-
-      main {
-        padding: 24px 16px 60px;
-      }
-
-      .page-title {
-        font-size: 24px;
-        margin-bottom: 24px;
-      }
-
-      .controls {
-        margin-bottom: 24px;
-      }
-
-      .search-wrap {
-        min-width: 100%;
-      }
-
-      .stats-bar {
-        grid-template-columns: repeat(2, 1fr);
-      }
-
-      .result-card__row {
-        flex-wrap: wrap;
-        padding: 16px;
-        gap: 12px;
-      }
-
-      .result-tournament {
-        display: none;
-      }
-
-      .result-date {
-        width: 100%;
-        min-width: auto;
-        order: -1;
-      }
-
-      .result-teams {
-        width: 100%;
-        order: 0;
-      }
-
-      .rt-name {
-        font-size: 14px;
-      }
-
-      .rt-logo,
-      .rt-logo-ph {
-        width: 36px;
-        height: 36px;
-      }
-
-      .rs-main {
-        font-size: 24px;
-      }
-
-      .period-tabs {
-        gap: 6px;
-      }
-
-      .period-tab {
-        font-size: 12px;
-        padding: 8px 12px;
-      }
-    }
-
-    @media (max-width: 480px) {
-      .page-title {
-        font-size: 20px;
-      }
-
-      .result-card__row {
-        flex-direction: column;
-        align-items: stretch;
-      }
-
-      .result-date {
-        text-align: left;
-      }
-
-      .result-teams {
-        justify-content: space-between;
-      }
-
-      .rt {
-        flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
-      }
-
-      .rt.right {
-        flex-direction: row;
-        align-items: center;
-      }
-
-      .rt-name {
-        font-size: 13px;
-      }
-
-      .rs-main {
-        font-size: 20px;
-      }
-
-      .stat-value {
-        font-size: 24px;
-      }
-
-      .stat-label {
-        font-size: 11px;
-      }
-
-      .pagination-controls {
-        gap: 8px;
-      }
-
-      .page-btn {
-        padding: 8px 12px;
-        font-size: 12px;
-      }
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SweCS2 · Match History</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@100..900&family=JetBrains+Mono:wght@100..900&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script src="tailwind-config.js"></script>
+<link rel="stylesheet" href="theme.css" />
+<style>
+  .period-tab[aria-pressed="true"] { background: rgba(230, 194, 0, 0.15); border-color: #E6C200; color: #e1e2e7; }
+</style>
 </head>
-<body>
+<body class="bg-background text-on-surface font-body-md antialiased min-h-screen flex flex-col">
 
-<header>
-  <div class="header-content">
-    <a class="logo" href="./">
-      <svg class="logo-flag" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#004B87"/><rect y="12" width="32" height="8" fill="#FFD700"/><rect x="12" width="8" height="32" fill="#FFD700"/></svg>
-      <span class="logo-text">SWE<span>CS2</span></span>
+<nav class="bg-surface/80 backdrop-blur-xl font-body-md text-body-md full-width top-0 sticky z-50 flex justify-between items-center w-full px-container-padding max-w-[1200px] mx-auto h-16 border-b border-outline-variant/20">
+  <div class="flex items-center gap-6">
+    <a href="./" class="font-headline-lg text-headline-lg font-extrabold text-swedish-gold tracking-tighter flex items-center gap-2">
+      <svg width="22" height="22" viewBox="0 0 32 32" class="shrink-0"><rect width="32" height="32" rx="6" fill="#002244"/><rect y="12" width="32" height="8" fill="#E6C200"/><rect x="12" width="8" height="32" fill="#E6C200"/></svg>
+      SweCS2
     </a>
-    <nav>
-      <a href="./">Live</a>
-      <a href="history" class="active">History</a>
-    </nav>
-  </div>
-</header>
-
-<main>
-  <div class="page-title">Match History</div>
-
-  <div class="controls">
-    <div class="search-wrap">
-      <input id="search-input" type="text" autocomplete="off"
-             placeholder="Search teams or tournaments…" oninput="onSearch(this.value)" />
+    <div class="hidden md:flex gap-6">
+      <a class="nav-link text-on-surface-variant font-medium hover:text-swedish-gold transition-colors duration-200" href="./">Live Scores</a>
+      <a class="nav-link text-swedish-gold font-bold border-b-2 border-swedish-gold pb-1" href="history" aria-current="page">Results</a>
+      <a class="nav-link text-on-surface-variant font-medium hover:text-swedish-gold transition-colors duration-200" href="teams">Teams</a>
+      <a class="nav-link text-on-surface-variant font-medium hover:text-swedish-gold transition-colors duration-200" href="players">Players</a>
     </div>
   </div>
-
-  <div id="stats-section" class="stats-section" style="display:none">
-    <div class="period-tabs">
-      <button class="period-tab active" onclick="setPeriod('year')">This Year</button>
-      <button class="period-tab" onclick="setPeriod('9m')">9 Months</button>
-      <button class="period-tab" onclick="setPeriod('6m')">6 Months</button>
-      <button class="period-tab" onclick="setPeriod('3m')">3 Months</button>
-      <button class="period-tab" onclick="setPeriod('month')">This Month</button>
-      <button class="period-tab" onclick="setPeriod('week')">This Week</button>
-      <button class="period-tab" onclick="setPeriod('day')">Today</button>
-      <button class="period-tab" id="custom-tab" onclick="toggleCustomRange()">Custom</button>
-    </div>
-    <div class="custom-range" id="custom-range">
-      <label for="custom-from">From</label>
-      <input type="date" id="custom-from" />
-      <label for="custom-to">To</label>
-      <input type="date" id="custom-to" />
-      <button onclick="applyCustomRange()">Apply</button>
-      <button class="clear-range" onclick="clearCustomRange()">Clear</button>
-    </div>
-    <div class="stats-bar">
-      <div class="stat-item"><div class="stat-value" id="stat-total">—</div><div class="stat-label">Matches</div></div>
-      <div class="stat-item"><div class="stat-value green" id="stat-wins">—</div><div class="stat-label">SWE Wins</div></div>
-      <div class="stat-item"><div class="stat-value red" id="stat-losses">—</div><div class="stat-label">SWE Losses</div></div>
-      <div class="stat-item"><div class="stat-value yellow" id="stat-winrate">—</div><div class="stat-label">Win Rate</div></div>
-    </div>
+  <div class="relative hidden md:block">
+    <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+    <input id="search-input" type="text" autocomplete="off"
+      class="bg-surface-container text-on-surface border border-outline-variant/30 rounded-full pl-9 pr-4 py-1.5 focus:outline-none focus:border-swedish-gold font-metadata text-sm w-64"
+      placeholder="Search teams or tournaments…" oninput="onSearch(this.value)" />
   </div>
+</nav>
 
-  <div id="content">
-    <div class="state-card"><div class="spinner"></div><p>Loading match history…</p></div>
-  </div>
+<main class="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-stack-lg flex flex-col gap-stack-lg">
+  <section class="flex flex-col gap-stack-md">
+    <div class="text-center md:text-left">
+      <h2 class="font-metadata text-metadata text-on-surface-variant uppercase tracking-wider mb-2">Counter-Strike 2</h2>
+      <h1 class="font-display-lg text-display-lg text-on-surface md:text-display-lg text-headline-lg-mobile font-extrabold">Match History Results</h1>
+    </div>
+
+    <div class="relative md:hidden">
+      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+      <input type="text" autocomplete="off"
+        class="w-full bg-surface-container text-on-surface border border-outline-variant/30 rounded-full pl-9 pr-4 py-2 focus:outline-none focus:border-swedish-gold font-metadata text-sm"
+        placeholder="Search teams or tournaments…" oninput="onSearch(this.value)" />
+    </div>
+
+    <div class="bg-surface-container rounded-xl p-4 border border-outline-variant/20 flex flex-wrap gap-2 items-center">
+      <span class="font-label-caps text-label-caps text-on-surface-variant mr-2">PERIOD:</span>
+      <div id="period-tabs" class="flex flex-wrap gap-2"></div>
+    </div>
+
+    <div id="stats-section" class="hidden">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bg-surface-container rounded-lg p-4 text-center border border-outline-variant/20">
+          <div class="font-match-score text-match-score text-on-surface" id="stat-total">—</div>
+          <div class="font-label-caps text-label-caps text-on-surface-variant mt-1">Matches</div>
+        </div>
+        <div class="bg-surface-container rounded-lg p-4 text-center border border-outline-variant/20">
+          <div class="font-match-score text-match-score text-swedish-gold" id="stat-wins">—</div>
+          <div class="font-label-caps text-label-caps text-on-surface-variant mt-1">SWE Wins</div>
+        </div>
+        <div class="bg-surface-container rounded-lg p-4 text-center border border-outline-variant/20">
+          <div class="font-match-score text-match-score text-error" id="stat-losses">—</div>
+          <div class="font-label-caps text-label-caps text-on-surface-variant mt-1">SWE Losses</div>
+        </div>
+        <div class="bg-surface-container rounded-lg p-4 text-center border border-outline-variant/20">
+          <div class="font-match-score text-match-score text-tertiary" id="stat-winrate">—</div>
+          <div class="font-label-caps text-label-caps text-on-surface-variant mt-1">Win Rate</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="content" class="flex flex-col gap-stack-md">
+    <div class="flex flex-col items-center justify-center py-24">
+      <div class="spinner"></div>
+      <p class="font-metadata text-metadata text-on-surface-variant">Loading match history…</p>
+    </div>
+  </section>
 </main>
 
+<footer class="bg-surface-container-lowest full-width mt-stack-lg border-t border-outline-variant/30">
+  <div class="w-full py-stack-lg px-container-padding max-w-[1200px] mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+    <div class="font-headline-lg-mobile text-headline-lg-mobile text-swedish-gold font-extrabold tracking-tighter">SweCS2</div>
+    <div class="flex flex-wrap justify-center gap-6">
+      <a class="font-metadata text-metadata text-on-surface-variant hover:text-on-surface transition-colors opacity-80 hover:opacity-100" href="./">Live</a>
+      <a class="font-metadata text-metadata text-on-surface-variant hover:text-on-surface transition-colors opacity-80 hover:opacity-100" href="teams">Teams</a>
+      <a class="font-metadata text-metadata text-on-surface-variant hover:text-on-surface transition-colors opacity-80 hover:opacity-100" href="players">Players</a>
+    </div>
+    <div class="font-metadata text-metadata text-tertiary">TRACKING SWEDISH CS2 TALENT</div>
+  </div>
+</footer>
+
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
-<div id="turnstile-container" style="display:none"></div>
+<div id="turnstile-container"></div>
 <script src="shared.js"></script>
 <script>
-const CACHE_VERSION    = 'v3';
-const HISTORY_KEY      = 'swe_history_' + CACHE_VERSION;
-const HISTORY_FETCH_KEY = 'swe_history_fetched_' + CACHE_VERSION;
-const HISTORY_STALE_MS  = 2 * 60 * 60 * 1000;
-const PERIODS = ['year','9m','6m','3m','month','week','day'];
+const PERIODS = [
+  ['year',  'This Year'],
+  ['9m',    '9 Months'],
+  ['6m',    '6 Months'],
+  ['3m',    '3 Months'],
+  ['month', 'This Month'],
+  ['week',  'This Week'],
+  ['day',   'Today'],
+];
 const PAGE_SIZE = 25;
 
-let allMatches   = [];
-let searchQuery  = '';
+let allMatches  = [];
+let searchQuery = '';
 let activePeriod = 'year';
 let currentPage  = 1;
-let customFrom   = null;
-let customTo     = null;
 
 window.addEventListener('DOMContentLoaded', () => {
-  allMatches = loadAndPruneHistory();
-  if (allMatches.length) {
-    document.getElementById('stats-section').style.display = 'flex';
-    renderResults();
-  }
+  document.getElementById('period-tabs').innerHTML = PERIODS.map(([key, label], i) => `
+    <button class="period-tab font-label-caps text-label-caps px-4 py-2 rounded border border-outline-variant/30 text-on-surface-variant hover:border-swedish-gold transition-colors"
+      aria-pressed="${key === activePeriod}" onclick="setPeriod('${key}')">${label}</button>`).join('');
 
-  const lastFetch = parseInt(localStorage.getItem(HISTORY_FETCH_KEY) || '0', 10);
-  const isStale   = Date.now() - lastFetch > HISTORY_STALE_MS;
-  if (isStale || !allMatches.length) {
-    fetchAndMerge();
-  }
+  ensureMatchHistory().then(matches => {
+    allMatches = matches;
+    if (allMatches.length) {
+      document.getElementById('stats-section').classList.remove('hidden');
+      renderResults();
+    } else {
+      document.getElementById('content').innerHTML = `
+        <div class="flex flex-col items-center justify-center py-24 text-center gap-3">
+          <span class="material-symbols-outlined text-5xl text-on-surface-variant/50">bar_chart</span>
+          <h3 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">No Matches Found</h3>
+          <p class="font-body-md text-body-md text-on-surface-variant">No match history is cached yet.</p>
+        </div>`;
+    }
+  }).catch(err => console.error('[SWE CS2] History fetch error:', err));
 });
 
-async function fetchAndMerge() {
-  try {
-    await ensureSwedishData();
-    const pastList = await pandaFetch('/csgo/matches/past?per_page=100&include=opponents,results,games,winner');
-    const fetched  = pastList.filter(m => m.opponents?.length === 2 && (sweInfo(m.opponents[0]?.opponent) || sweInfo(m.opponents[1]?.opponent)));
-    const existing = cacheGet(HISTORY_KEY) || [];
-    const merged   = dedup([...fetched, ...existing]);
-    cacheSet(HISTORY_KEY, merged);
-    localStorage.setItem(HISTORY_FETCH_KEY, Date.now().toString());
-    allMatches = merged;
-    renderResults();
-  } catch(err) {
-    console.error('[SWE CS2] Fetch error:', err);
-  }
-}
-
-function dedup(matches) {
-  const seen = new Set();
-  return matches.filter(m => {
-    if (seen.has(m.id)) return false;
-    seen.add(m.id);
-    return true;
-  });
-}
-
-function loadAndPruneHistory() {
-  const raw = cacheGet(HISTORY_KEY) || [];
-  return raw.filter(m => m.begin_at && m.opponents?.length === 2);
-}
-
 function filterByPeriod(matches, period) {
-  if (period === 'custom') {
-    return matches.filter(m => {
-      const t = new Date(m.begin_at);
-      if (customFrom && t < customFrom) return false;
-      if (customTo && t > customTo) return false;
-      return true;
-    });
-  }
   const now = new Date();
   let start;
   switch(period) {
@@ -1037,56 +194,8 @@ function onSearch(q) {
 function setPeriod(p) {
   activePeriod = p;
   currentPage = 1;
-  document.querySelectorAll('.period-tab').forEach(btn => btn.classList.remove('active'));
-  event.target.classList.add('active');
-  document.getElementById('custom-range').classList.remove('open');
-  renderResults();
-}
-
-function toggleCustomRange() {
-  const panel = document.getElementById('custom-range');
-  panel.classList.toggle('open');
-  if (panel.classList.contains('open')) {
-    document.querySelectorAll('.period-tab').forEach(btn => btn.classList.remove('active'));
-    document.getElementById('custom-tab').classList.add('active');
-  }
-}
-
-function applyCustomRange() {
-  const fromVal = document.getElementById('custom-from').value;
-  const toVal   = document.getElementById('custom-to').value;
-
-  customFrom = fromVal ? new Date(fromVal + 'T00:00:00') : null;
-  customTo   = toVal   ? new Date(toVal   + 'T23:59:59') : null;
-
-  if (!customFrom && !customTo) return;
-  if (customFrom && customTo && customFrom > customTo) {
-    // swap so the range always makes sense regardless of input order
-    [customFrom, customTo] = [customTo, customFrom];
-  }
-
-  activePeriod = 'custom';
-  currentPage = 1;
-  document.querySelectorAll('.period-tab').forEach(btn => btn.classList.remove('active'));
-  document.getElementById('custom-tab').classList.add('active');
-  renderResults();
-}
-
-function clearCustomRange() {
-  customFrom = null;
-  customTo   = null;
-  document.getElementById('custom-from').value = '';
-  document.getElementById('custom-to').value   = '';
-  document.getElementById('custom-range').classList.remove('open');
-  setPeriodDirect('year');
-}
-
-function setPeriodDirect(p) {
-  activePeriod = p;
-  currentPage = 1;
-  document.querySelectorAll('.period-tab').forEach(btn => btn.classList.remove('active'));
-  const target = [...document.querySelectorAll('.period-tab')].find(btn => btn.getAttribute('onclick') === `setPeriod('${p}')`);
-  if (target) target.classList.add('active');
+  document.querySelectorAll('.period-tab').forEach(btn => btn.setAttribute('aria-pressed', 'false'));
+  event.target.setAttribute('aria-pressed', 'true');
   renderResults();
 }
 
@@ -1103,10 +212,10 @@ function renderResults() {
 
   if (!matches.length) {
     document.getElementById('content').innerHTML = `
-      <div class="state-card">
-        <div class="icon">📊</div>
-        <h3>No Matches Found</h3>
-        <p>No matches match your search or time period.</p>
+      <div class="flex flex-col items-center justify-center py-24 text-center gap-3">
+        <span class="material-symbols-outlined text-5xl text-on-surface-variant/50">bar_chart</span>
+        <h3 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">No Matches Found</h3>
+        <p class="font-body-md text-body-md text-on-surface-variant">No matches match your search or time period.</p>
       </div>`;
     return;
   }
@@ -1122,43 +231,36 @@ function renderResults() {
   let html = '';
   let lastDate = '';
 
-  paginated.forEach((m, idx) => {
+  paginated.forEach(m => {
     const dateKey = new Date(m.begin_at).toLocaleDateString('sv-SE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     if (dateKey !== lastDate) {
-      html += `<div class="date-group">${dateKey}</div>`;
+      html += `<h3 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface uppercase tracking-wide mt-stack-md first:mt-0">${dateKey}</h3>`;
       lastDate = dateKey;
     }
-    html += renderCard(m, idx * 30);
+    html += renderCard(m);
   });
 
   html += `
-    <div class="pagination-info">Showing ${start + 1}–${Math.min(end, matches.length)} of ${matches.length}</div>
-    <div class="pagination-controls">
-      <button class="page-btn" onclick="goPrevPage()" ${currentPage === 1 ? 'disabled' : ''}>← Previous</button>
-      <div class="page-info">Page ${currentPage} / ${totalPages}</div>
-      <button class="page-btn" onclick="goNextPage(${totalPages})" ${currentPage >= totalPages ? 'disabled' : ''}>Next →</button>
+    <div class="flex flex-col items-center justify-center mt-stack-md gap-4">
+      <span class="font-metadata text-metadata text-on-surface-variant">Showing <strong class="text-on-surface">${start + 1}–${Math.min(end, matches.length)}</strong> of <strong class="text-on-surface">${matches.length}</strong> matches</span>
+      <div class="flex items-center gap-2">
+        <button class="bg-primary-container text-on-primary-container px-4 py-2 rounded font-bold hover:opacity-90 transition-opacity text-sm uppercase disabled:opacity-40 disabled:cursor-not-allowed" onclick="goPrevPage()" ${currentPage === 1 ? 'disabled' : ''}>Prev</button>
+        <span class="font-metadata text-metadata text-on-surface-variant px-2">Page ${currentPage} / ${totalPages}</span>
+        <button class="bg-primary-container text-on-primary-container px-4 py-2 rounded font-bold hover:opacity-90 transition-opacity text-sm uppercase disabled:opacity-40 disabled:cursor-not-allowed" onclick="goNextPage(${totalPages})" ${currentPage >= totalPages ? 'disabled' : ''}>Next</button>
+      </div>
     </div>`;
 
   document.getElementById('content').innerHTML = html;
 }
 
 function goPrevPage() {
-  if (currentPage > 1) {
-    currentPage--;
-    renderResults();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
+  if (currentPage > 1) { currentPage--; renderResults(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
 }
-
 function goNextPage(totalPages) {
-  if (currentPage < totalPages) {
-    currentPage++;
-    renderResults();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
+  if (currentPage < totalPages) { currentPage++; renderResults(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
 }
 
-function renderCard(match, delay) {
+function renderCard(match) {
   const t1 = match.opponents?.[0]?.opponent;
   const t2 = match.opponents?.[1]?.opponent;
   const t1swe = sweInfo(t1);
@@ -1167,28 +269,36 @@ function renderCard(match, delay) {
   const t1Win = match.winner?.id === t1?.id;
   const t2Win = match.winner?.id === t2?.id;
   const tournament = match.tournament?.name || match.league?.name || 'CS2';
+  const bo = match.number_of_games ? 'Bo' + match.number_of_games : '';
   const timeStr = new Date(match.begin_at).toLocaleString('sv-SE', { hour: '2-digit', minute: '2-digit' });
-  const dateStr = new Date(match.begin_at).toLocaleDateString('sv-SE', { month: 'short', day: 'numeric' });
 
   return `
-  <div class="result-card ${t1Win ? 'won' : t2Win ? 'lost' : ''}" style="animation-delay:${delay}ms">
-    <div class="result-card__row">
-      <div class="result-date">${dateStr} ${timeStr}</div>
-      <div class="result-tournament" title="${tournament}">${tournament}</div>
-      <div class="result-teams">
-        <div class="rt">
-          <div class="rt-namerow">${teamLogo(t1, 'rt-logo')}<span class="rt-name${t1Win ? ' winner' : ''}${t1swe ? ' swe-hl' : ''}">${t1?.name || 'TBD'}</span></div>
-          ${swePill(t1swe)}
+  <div class="match-card ${t1Win || t2Win ? 'glow-outline border-swedish-gold' : 'border-outline-variant/20'} bg-surface-container rounded-xl border overflow-hidden flex flex-col relative transition-colors">
+    <div class="flex items-center justify-between p-4 md:px-6">
+      <div class="flex items-center gap-4 w-1/4">
+        <span class="font-label-caps text-label-caps text-on-surface-variant border-r border-outline-variant/30 pr-4">${timeStr}</span>
+      </div>
+      <div class="flex items-center justify-center gap-4 md:gap-8 w-2/4 min-w-0">
+        <div class="flex items-center gap-3 justify-end w-2/5 min-w-0">
+          <span class="font-bold text-lg text-on-surface hidden md:block truncate${t1swe ? ' text-swedish-gold' : ''}">${t1?.name || 'TBD'}</span>
+          ${teamLogo(t1, 'w-8 h-8 rounded-full object-contain bg-surface-variant p-1 shrink-0')}
         </div>
-        <div class="result-score">
-          <div class="rs-main"><span style="color:${t1Win ? 'var(--success)' : t2Win ? 'var(--text-secondary)' : '#fff'}">${t1Maps}</span> : <span style="color:${t2Win ? 'var(--success)' : t1Win ? 'var(--text-secondary)' : '#fff'}">${t2Maps}</span></div>
-          <div class="rs-label">BO${match.number_of_games || '?'}</div>
+        <div class="font-match-score text-match-score flex items-center gap-2 shrink-0">
+          <span class="${t1Win ? 'text-swedish-gold' : 'text-on-surface-variant'}">${t1Maps}</span>
+          <span class="text-on-surface-variant">-</span>
+          <span class="${t2Win ? 'text-swedish-gold' : 'text-on-surface-variant'}">${t2Maps}</span>
         </div>
-        <div class="rt right">
-          <div class="rt-namerow">${teamLogo(t2, 'rt-logo')}<span class="rt-name${t2Win ? ' winner' : ''}${t2swe ? ' swe-hl' : ''}">${t2?.name || 'TBD'}</span></div>
-          ${swePill(t2swe, 'right')}
+        <div class="flex items-center gap-3 justify-start w-2/5 min-w-0">
+          ${teamLogo(t2, 'w-8 h-8 rounded-full object-contain bg-surface-variant p-1 shrink-0')}
+          <span class="font-bold text-lg text-on-surface hidden md:block truncate${t2swe ? ' text-swedish-gold' : ''}">${t2?.name || 'TBD'}</span>
         </div>
       </div>
+      <div class="w-1/4 flex justify-end">
+        <span class="font-label-caps text-label-caps text-on-surface-variant bg-surface px-2 py-1 rounded">FINISHED</span>
+      </div>
+    </div>
+    <div class="bg-surface-container-high py-2 text-center border-t border-outline-variant/10">
+      <span class="font-metadata text-metadata text-on-surface-variant">${tournament}${bo ? ' (' + bo + ')' : ''}</span>
     </div>
   </div>`;
 }
