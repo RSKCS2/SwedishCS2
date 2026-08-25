@@ -200,6 +200,101 @@ function getSwedishTeamIds() {
   return Object.keys(_sweTeamData);
 }
 
+// ── TEAM NATIONALITY (majority roster country) ─────────────────────────────
+// A team's own `location` field from PandaScore is often stale or missing,
+// which is why e.g. MIBR (4/5 Brazilian) or GamerLegion (mixed-EU roster)
+// showed up as "International". Instead we fetch each team's actual roster
+// and take the most common player nationality — same rule used to decide
+// whether a squad counts as majority-Swedish, just applied per country.
+const _teamCountryCacheKey = 'swe_team_country_v1';
+let _teamCountryCache = null;
+function _getTeamCountryCache() {
+  if (_teamCountryCache) return _teamCountryCache;
+  _teamCountryCache = cacheGet(_teamCountryCacheKey, 24 * 60 * 60 * 1000) || {};
+  return _teamCountryCache;
+}
+function _saveTeamCountryCache() {
+  cacheSet(_teamCountryCacheKey, _teamCountryCache);
+}
+
+// European country codes seen in CS2 rosters — used only to decide between
+// showing a specific country flag vs. a generic "Europe" tag for teams
+// whose roster is mixed-European with no single majority nationality.
+const EUROPE_CODES = new Set([
+  'SE','NO','DK','FI','IS','DE','FR','GB','IE','NL','BE','LU','ES','PT','IT',
+  'CH','AT','PL','CZ','SK','HU','SI','HR','BA','RS','ME','MK','AL','GR','RO',
+  'BG','UA','BY','LT','LV','EE','MD','MT','CY','AD','MC','SM','VA','LI','KZ',
+]);
+
+// Classifies a team's roster country for the flag shown on the card:
+// - 'majority': one nationality has a clear plurality (≥3 of a 5-man
+//   roster, or >60% for other sizes) → show that country's flag.
+// - 'europe': no single majority, but the roster is mostly European
+//   (e.g. G2 Ares, GamerLegion) → show a generic Europe flag.
+// - 'international': mixed with no European plurality either.
+function classifyTeamCountry(players) {
+  const counts = {};
+  let total = 0;
+  (players || []).forEach(p => {
+    const nat = p?.nationality;
+    if (!nat) return;
+    counts[nat] = (counts[nat] || 0) + 1;
+    total++;
+  });
+  if (!total) return { type: 'international' };
+
+  let best = null, bestCount = 0;
+  Object.entries(counts).forEach(([code, n]) => {
+    if (n > bestCount) { best = code; bestCount = n; }
+  });
+  if (bestCount >= 3 || bestCount / total > 0.6) {
+    return { type: 'majority', code: best };
+  }
+
+  const europeCount = Object.entries(counts)
+    .filter(([code]) => EUROPE_CODES.has(code))
+    .reduce((sum, [, n]) => sum + n, 0);
+  if (europeCount / total > 0.5) return { type: 'europe' };
+
+  return { type: 'international' };
+}
+
+// Fetches and caches the roster-country classification for a list of team
+// ids. Already-cached teams are skipped. Safe to call repeatedly — only
+// misses hit the network, one request per team.
+async function ensureTeamCountries(teamIds) {
+  const cache = _getTeamCountryCache();
+  const missing = [...new Set(teamIds)].filter(id => id && !(id in cache));
+  if (!missing.length) return cache;
+
+  await Promise.all(missing.map(async id => {
+    try {
+      const team = await pandaFetch(`/csgo/teams/${id}`);
+      cache[id] = classifyTeamCountry(team?.players);
+    } catch(e) {
+      cache[id] = { type: 'international' };
+      console.warn('[SWE] Could not fetch roster for team', id, e);
+    }
+  }));
+  _saveTeamCountryCache();
+  return cache;
+}
+
+function teamCountryInfo(teamId) {
+  return _getTeamCountryCache()[teamId] || null;
+}
+
+// Renders the flag/line for a team's roster country classification.
+// isMajoritySwedish takes priority (handled by the caller); this covers
+// the rest: a specific country, a generic Europe tag, or International.
+function teamCountryLine(teamId) {
+  const info = teamCountryInfo(teamId);
+  if (!info) return '🌐 International';
+  if (info.type === 'majority' && info.code) return `${countryFlag(info.code)} ${info.code.toUpperCase()}`;
+  if (info.type === 'europe') return '🇪🇺 Europe';
+  return '🌐 International';
+}
+
 // ── TEAM MATCH HISTORY (shared by history.html and teams.html) ────────────
 async function ensureMatchHistory() {
   const CACHE_VERSION     = 'v3';

@@ -110,6 +110,14 @@ window.addEventListener('DOMContentLoaded', async () => {
     } catch(e) { console.warn('[SWE] Valve standings unavailable:', e); }
     sweValveRankMap = computeSwedishValveRanks(allTeams, valveGlobalCache);
 
+    // Roster-based country for the non-majority-Swedish teams (e.g. MIBR,
+    // GamerLegion) so the flag reflects who's actually on the team instead
+    // of PandaScore's often-stale `location` field.
+    try {
+      const nonSweIds = allTeams.filter(t => !(sweInfo({ id: t.id })?.isMajority)).map(t => t.id);
+      await ensureTeamCountries(nonSweIds);
+    } catch(e) { console.warn('[SWE] Could not load team countries:', e); }
+
     allTeams.sort((a, b) => {
       const ra = sweValveRankMap[a.id], rb = sweValveRankMap[b.id];
       if (ra && rb) return ra - rb;
@@ -154,9 +162,7 @@ function renderTeams() {
 function renderTeamCard(team) {
   const info = sweInfo({ id: team.id }) || {};
   const squadLabel = info.isFull ? 'Full Squad' : info.count ? info.count + '/5 Swedish' : '';
-  const nationalityLine = info.isMajority
-    ? '🇸🇪 Sweden'
-    : (team.location ? `${countryFlag(team.location)} ${team.location.toUpperCase()}` : '🌐 International');
+  const nationalityLine = info.isMajority ? '🇸🇪 Sweden' : teamCountryLine(team.id);
   const recent = team.matches.slice(0, 3);
   const sweRank   = sweValveRankMap[team.id] || null;
   const worldRank = findValveRank(valveGlobalCache, team.name)?.rank ?? null;

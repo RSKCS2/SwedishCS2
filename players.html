@@ -110,13 +110,19 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     renderPlayers();
 
-    // Team rank badges load in behind the initial render — match history
-    // isn't needed to show the roster, only to compute #1, #2, #3, …
+    // Team rank badges and country flags load in behind the initial
+    // render — neither is needed to show the roster itself.
     try {
       historyMatches = await ensureMatchHistory();
       recomputeRanks();
       renderPlayers();
     } catch(e) { console.warn('[SWE] Could not compute player team ranks:', e); }
+
+    try {
+      const teamIds = [...new Set(allPlayers.filter(p => p.current_team).map(p => p.current_team.id))];
+      await ensureTeamCountries(teamIds);
+      renderPlayers();
+    } catch(e) { console.warn('[SWE] Could not load team countries:', e); }
   } catch(err) {
     console.error('[SWE CS2] Players fetch error:', err);
     document.getElementById('content').innerHTML = `
@@ -187,6 +193,10 @@ function renderPlayers() {
 
 function renderPlayerCard(p) {
   const rank = p.current_team ? teamRankMap[p.current_team.id] : null;
+  const teamSwe = p.current_team ? sweInfo(p.current_team) : null;
+  const teamFlagLine = p.current_team
+    ? (teamSwe?.isMajority ? '🇸🇪' : (teamCountryInfo(p.current_team.id) ? teamCountryLine(p.current_team.id).split(' ')[0] : ''))
+    : '';
   // Player-level stats aren't wired up to a data source yet — show 0s
   // rather than hiding the row, so the layout doesn't jump once they are.
   const rating = p.rating ?? 0;
@@ -201,7 +211,7 @@ function renderPlayerCard(p) {
         ${teamLogo({ image_url: p.image_url, name: p.name }, 'w-14 h-14 rounded-full border border-outline-variant/50 object-cover bg-deep-navy shrink-0')}
         <div class="min-w-0">
           <h3 class="font-body-md text-body-md text-on-surface font-bold m-0 truncate">${p.name || '?'}</h3>
-          <p class="font-metadata text-metadata text-on-surface-variant truncate">${p.current_team?.name || 'Free agent'}</p>
+          <p class="font-metadata text-metadata text-on-surface-variant truncate flex items-center gap-1">${teamFlagLine ? `<span class="shrink-0">${teamFlagLine}</span>` : ''}<span class="truncate">${p.current_team?.name || 'Free agent'}</span></p>
         </div>
       </div>
     </div>
