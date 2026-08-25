@@ -64,11 +64,11 @@
   <div class="w-full py-stack-lg px-container-padding max-w-[1200px] mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
     <div class="font-headline-lg-mobile text-headline-lg-mobile text-swedish-gold font-bold">SweCS2</div>
     <div class="flex flex-wrap justify-center gap-6">
-      <a class="text-on-surface-variant font-metadata text-metadata hover:text-on-surface transition-colors opacity-80 hover:opacity-100" href="./">Live</a>
-      <a class="text-on-surface-variant font-metadata text-metadata hover:text-on-surface transition-colors opacity-80 hover:opacity-100" href="history">Results</a>
-      <a class="text-on-surface-variant font-metadata text-metadata hover:text-on-surface transition-colors opacity-80 hover:opacity-100" href="players">Players</a>
+      <a class="text-on-surface-variant font-metadata text-metadata hover:text-on-surface transition-colors opacity-80 hover:opacity-100" href="terms">Terms of Service</a>
+      <a class="text-on-surface-variant font-metadata text-metadata hover:text-on-surface transition-colors opacity-80 hover:opacity-100" href="privacy">Privacy Policy</a>
+      <a class="text-on-surface-variant font-metadata text-metadata hover:text-on-surface transition-colors opacity-80 hover:opacity-100" href="mailto:contact@rskcs2.github.io">Contact</a>
     </div>
-    <div class="text-tertiary font-metadata text-metadata text-sm text-center md:text-right">TRACKING SWEDISH CS2 TALENT</div>
+    <div class="text-tertiary font-metadata text-metadata text-sm text-center md:text-right">© 2026 SweCS2</div>
   </div>
 </footer>
 
@@ -78,6 +78,9 @@
 <script>
 let allTeams = [];
 let teamQuery = '';
+let valveGlobalCache = [];
+let valveEuropeCache = [];
+let sweValveRankMap  = {};
 
 window.addEventListener('DOMContentLoaded', async () => {
   try {
@@ -93,7 +96,28 @@ window.addEventListener('DOMContentLoaded', async () => {
       }
     });
 
-    allTeams = Object.values(profiles).sort((a, b) => (b.matches.length - a.matches.length));
+    allTeams = Object.values(profiles);
+
+    // Pull Valve's own published world/EU regional standings so the rank
+    // badges reflect Valve's numbers, not our derived win/loss form. The
+    // Swedish rank (#1, #2, #3, …) is just those world ranks reordered
+    // among the Swedish teams — best world rank wins.
+    try {
+      [valveGlobalCache, valveEuropeCache] = await Promise.all([
+        fetchValveStandings('global'),
+        fetchValveStandings('europe'),
+      ]);
+    } catch(e) { console.warn('[SWE] Valve standings unavailable:', e); }
+    sweValveRankMap = computeSwedishValveRanks(allTeams, valveGlobalCache);
+
+    allTeams.sort((a, b) => {
+      const ra = sweValveRankMap[a.id], rb = sweValveRankMap[b.id];
+      if (ra && rb) return ra - rb;
+      if (ra) return -1;
+      if (rb) return 1;
+      return (b.matches.length - a.matches.length);
+    });
+
     renderTeams();
   } catch(err) {
     console.error('[SWE CS2] Teams fetch error:', err);
@@ -131,13 +155,16 @@ function renderTeamCard(team) {
   const info = sweInfo({ id: team.id }) || {};
   const squadLabel = info.isFull ? 'Full Squad' : info.count ? info.count + '/5 Swedish' : '';
   const recent = team.matches.slice(0, 3);
+  const sweRank   = sweValveRankMap[team.id] || null;
+  const worldRank = findValveRank(valveGlobalCache, team.name)?.rank ?? null;
+  const euRank    = findValveRank(valveEuropeCache, team.name)?.rank ?? null;
 
   const recentHtml = recent.length
     ? recent.map(m => `
-      <div class="flex justify-between items-center text-sm">
+      <div class="flex justify-between items-center gap-2 text-sm">
         <span class="text-on-surface w-24 truncate">vs ${m.oppName}</span>
         <span class="font-bold ${m.won ? 'text-green-400' : 'text-red-400'}">${m.selfMaps} - ${m.oppMaps}</span>
-        <span class="${m.won ? 'text-green-400' : 'text-red-400'} font-bold w-4 text-right">${m.won ? 'W' : 'L'}</span>
+        <span class="font-label-caps text-label-caps px-2 py-0.5 rounded border ${m.won ? 'bg-green-500/15 text-green-400 border-green-500/40' : 'bg-red-500/15 text-red-400 border-red-500/40'}">${m.won ? 'WIN' : 'LOSS'}</span>
       </div>`).join('')
     : `<div class="text-sm text-on-surface-variant">No recorded matches yet.</div>`;
 
@@ -146,12 +173,17 @@ function renderTeamCard(team) {
     <div class="absolute inset-0 bg-gradient-to-br from-swedish-gold/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
     <div class="flex justify-between items-start z-10">
       <div class="flex items-center gap-4 min-w-0">
-        <div class="w-16 h-16 bg-surface rounded flex items-center justify-center border border-outline-variant/30 p-2 shrink-0">
+        ${sweRank ? `<div class="shrink-0 w-9 h-9 rounded-lg bg-swedish-gold text-deep-navy font-black flex items-center justify-center text-sm">#${sweRank}</div>` : ''}
+        <div class="w-20 h-20 bg-surface rounded-lg flex items-center justify-center border border-outline-variant/30 p-2 shrink-0">
           ${teamLogo({ image_url: team.logo, name: team.name }, 'max-w-full max-h-full object-contain')}
         </div>
         <div class="min-w-0">
           <h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-bold truncate">${team.name}</h2>
           <p class="font-metadata text-metadata text-on-surface-variant flex items-center gap-1">🇸🇪 Sweden</p>
+          <div class="flex gap-2 mt-1 flex-wrap">
+            ${worldRank ? `<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container-highest px-1.5 py-0.5 rounded">WORLD #${worldRank}</span>` : ''}
+            ${euRank ? `<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container-highest px-1.5 py-0.5 rounded">EU #${euRank}</span>` : ''}
+          </div>
         </div>
       </div>
       ${squadLabel ? `<div class="text-right shrink-0"><span class="font-label-caps text-label-caps text-swedish-gold block">Squad</span><span class="font-bold text-sm text-on-surface">${squadLabel}</span></div>` : ''}

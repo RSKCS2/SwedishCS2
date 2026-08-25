@@ -229,11 +229,13 @@ async function ensureMatchHistory() {
   return matches;
 }
 
-// Builds a per-Swedish-team profile (logo, recent form, 3-month record) from
-// cached/fetched match history. Used by teams.html.
-function buildTeamProfiles(matches) {
+// Builds a per-Swedish-team profile (logo, recent form, N-month record) from
+// cached/fetched match history. Used by teams.html and players.html.
+// cutoffMonths controls the window used for wins3m/losses3m (default 3, kept
+// for backwards compatibility with existing callers).
+function buildTeamProfiles(matches, cutoffMonths = 3) {
   const profiles = {};
-  const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 3);
+  const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - cutoffMonths);
 
   matches.forEach(m => {
     const t1 = m.opponents?.[0]?.opponent;
@@ -577,4 +579,38 @@ function teamLocationBadge(team) {
   const code = team.location.toUpperCase();
   const flag = countryFlag(code);
   return `<span class="location-badge">${flag} ${code}</span>`;
+}
+
+// Orders Swedish teams among themselves by their Valve world rank (lower
+// number = better). Teams with no Valve entry sort last and receive no
+// rank. Returns a map of teamId -> Swedish rank (1, 2, 3, …).
+function computeSwedishValveRanks(teams, valveGlobal) {
+  const withRank = teams.map(t => ({ t, rank: findValveRank(valveGlobal, t.name)?.rank ?? null }));
+  withRank.sort((a, b) => {
+    if (a.rank === null && b.rank === null) return 0;
+    if (a.rank === null) return 1;
+    if (b.rank === null) return -1;
+    return a.rank - b.rank;
+  });
+  const map = {};
+  let counter = 0;
+  withRank.forEach(({ t, rank }) => { if (rank !== null) { counter++; map[t.id] = counter; } });
+  return map;
+}
+
+// Builds a readable "tournament / stage" label from a PandaScore match
+// object, e.g. "ESL Pro League Season 21 · Semifinal" instead of a bare
+// tournament name. Falls back gracefully as fields are missing.
+function matchContext(match) {
+  const league = match.league?.name || null;
+  const serie  = match.serie?.full_name || match.serie?.name || null;
+  const tourn  = match.tournament?.name || null;
+  const stage  = (match.name && match.name !== tourn) ? match.name : null;
+
+  const parts = [];
+  if (league) parts.push(league);
+  if (serie && serie !== league) parts.push(serie);
+  if (tourn && tourn !== serie && tourn !== league) parts.push(tourn);
+  const label = parts.join(' – ') || 'CS2';
+  return stage ? `${label} · ${stage}` : label;
 }

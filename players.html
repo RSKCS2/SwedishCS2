@@ -54,6 +54,15 @@
           class="bg-surface-container-high border-none text-on-surface text-sm rounded-md py-1.5 pl-3 pr-8 focus:ring-1 focus:ring-swedish-gold">
           <option value="">All Teams</option>
         </select>
+        <select id="period-filter" onchange="onPeriodFilter(this.value)"
+          class="bg-surface-container-high border-none text-on-surface text-sm rounded-md py-1.5 pl-3 pr-8 focus:ring-1 focus:ring-swedish-gold">
+          <option value="1">This Month</option>
+          <option value="3" selected>3 Months</option>
+          <option value="6">6 Months</option>
+          <option value="9">9 Months</option>
+          <option value="12">This Year</option>
+          <option value="1200">All Time</option>
+        </select>
       </div>
     </div>
 
@@ -70,11 +79,11 @@
   <div class="w-full py-stack-lg px-container-padding max-w-[1200px] mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
     <div class="font-headline-lg-mobile text-headline-lg-mobile text-swedish-gold opacity-80 hover:opacity-100 transition-opacity">SweCS2</div>
     <div class="flex flex-wrap justify-center gap-6">
-      <a class="font-metadata text-metadata text-on-surface-variant hover:text-on-surface transition-colors" href="./">Live</a>
-      <a class="font-metadata text-metadata text-on-surface-variant hover:text-on-surface transition-colors" href="history">Results</a>
-      <a class="font-metadata text-metadata text-on-surface-variant hover:text-on-surface transition-colors" href="teams">Teams</a>
+      <a class="font-metadata text-metadata text-on-surface-variant hover:text-on-surface transition-colors" href="terms">Terms of Service</a>
+      <a class="font-metadata text-metadata text-on-surface-variant hover:text-on-surface transition-colors" href="privacy">Privacy Policy</a>
+      <a class="font-metadata text-metadata text-on-surface-variant hover:text-on-surface transition-colors" href="mailto:contact@rskcs2.github.io">Contact</a>
     </div>
-    <div class="font-metadata text-metadata text-tertiary">TRACKING SWEDISH CS2 TALENT</div>
+    <div class="font-metadata text-metadata text-tertiary">© 2026 SweCS2</div>
   </div>
 </footer>
 
@@ -85,6 +94,9 @@
 let allPlayers = [];
 let playerQuery = '';
 let teamFilterId = '';
+let periodMonths = 3;
+let teamRankMap = {};
+let historyMatches = [];
 
 window.addEventListener('DOMContentLoaded', async () => {
   try {
@@ -97,6 +109,14 @@ window.addEventListener('DOMContentLoaded', async () => {
       '<option value="">All Teams</option>' + teamOptions.map(([id, name]) => `<option value="${id}">${name}</option>`).join('');
 
     renderPlayers();
+
+    // Team rank badges load in behind the initial render — match history
+    // isn't needed to show the roster, only to compute #1, #2, #3, …
+    try {
+      historyMatches = await ensureMatchHistory();
+      recomputeRanks();
+      renderPlayers();
+    } catch(e) { console.warn('[SWE] Could not compute player team ranks:', e); }
   } catch(err) {
     console.error('[SWE CS2] Players fetch error:', err);
     document.getElementById('content').innerHTML = `
@@ -116,6 +136,23 @@ function onPlayerSearch(q) {
 function onTeamFilter(id) {
   teamFilterId = id;
   renderPlayers();
+}
+
+function onPeriodFilter(months) {
+  periodMonths = parseInt(months, 10);
+  recomputeRanks();
+  renderPlayers();
+}
+
+// Reuses the same ranking logic as the Teams page (buildTeamProfiles +
+// rankTeamProfiles) so a team's rank number always matches between pages,
+// just recomputed for whichever period the user picked here.
+function recomputeRanks() {
+  if (!historyMatches.length) { teamRankMap = {}; return; }
+  const profiles = buildTeamProfiles(historyMatches, periodMonths);
+  const ranked = rankTeamProfiles(profiles);
+  teamRankMap = {};
+  ranked.forEach(p => { teamRankMap[p.id] = p.rank; });
 }
 
 function renderPlayers() {
@@ -139,9 +176,11 @@ function renderPlayers() {
 function renderPlayerCard(p) {
   const teamSwe = p.current_team ? sweInfo(p.current_team) : null;
   const squadLabel = teamSwe ? (teamSwe.isFull ? 'Full Squad' : teamSwe.count + '/5 Swedish') : '';
+  const rank = p.current_team ? teamRankMap[p.current_team.id] : null;
 
   return `
   <div class="bg-deep-navy rounded-xl border border-outline-variant/30 hover:border-outline-variant/60 transition-colors overflow-hidden flex flex-col relative">
+    ${rank ? `<div class="absolute top-2 left-2 z-10 w-8 h-8 rounded-lg bg-swedish-gold text-deep-navy font-black flex items-center justify-center text-xs">#${rank}</div>` : ''}
     <div class="h-24 bg-surface-container-high relative flex items-center px-4">
       <div class="flex items-center gap-3 min-w-0">
         ${teamLogo({ image_url: p.image_url, name: p.name }, 'w-14 h-14 rounded-full border border-outline-variant/50 object-cover bg-deep-navy shrink-0')}

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SweCS2 · Privacy Policy</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@100..900&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script src="tailwind-config.js"></script>
+<link rel="stylesheet" href="theme.css" />
+</head>
+<body class="bg-surface-blue text-on-surface font-body-md min-h-screen flex flex-col antialiased">
+
+<nav class="bg-surface-blue/80 backdrop-blur-xl full-width top-0 sticky z-50 border-b border-outline-variant/20">
+  <div class="flex justify-between items-center w-full px-container-padding max-w-[1200px] mx-auto h-16">
+    <div class="flex items-center gap-8">
+      <a href="./" class="font-headline-lg text-headline-lg font-extrabold text-swedish-gold tracking-tighter flex items-center gap-2">
+        <svg width="22" height="22" viewBox="0 0 32 32" class="shrink-0"><rect width="32" height="32" rx="6" fill="#002244"/><rect y="12" width="32" height="8" fill="#E6C200"/><rect x="12" width="8" height="32" fill="#E6C200"/></svg>
+        SweCS2
+      </a>
+      <div class="hidden md:flex gap-6 items-center h-full">
+        <a class="nav-link text-on-surface-variant font-medium hover:text-swedish-gold transition-colors duration-200 h-full flex items-center" href="./">Live Scores</a>
+        <a class="nav-link text-on-surface-variant font-medium hover:text-swedish-gold transition-colors duration-200 h-full flex items-center" href="history">Results</a>
+        <a class="nav-link text-on-surface-variant font-medium hover:text-swedish-gold transition-colors duration-200 h-full flex items-center" href="teams">Teams</a>
+        <a class="nav-link text-on-surface-variant font-medium hover:text-swedish-gold transition-colors duration-200 h-full flex items-center" href="players">Players</a>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<main class="flex-1 w-full max-w-[800px] mx-auto px-container-padding py-stack-lg flex flex-col gap-stack-md">
+  <h1 class="font-display-lg text-display-lg text-on-surface">Privacy Policy</h1>
+  <p class="font-metadata text-metadata text-on-surface-variant">Last updated: August 2026</p>
+
+  <div class="flex flex-col gap-stack-sm text-on-surface-variant font-body-md text-body-md leading-relaxed">
+    <p>SweCS2 keeps data collection to a minimum. Here is what happens when you use the site.</p>
+
+    <h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mt-2">Local storage and caching</h2>
+    <p>Match, team, and player data is cached in your browser's local storage so pages load quickly and stay usable when the API is briefly unreachable. This cache never leaves your device and is not linked to any personal identifier.</p>
+
+    <h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mt-2">Bot protection</h2>
+    <p>The site uses Cloudflare Turnstile to verify that requests to the backend come from a real browser rather than automated scraping. Turnstile runs invisibly and follows Cloudflare's own privacy practices.</p>
+
+    <h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mt-2">Third-party data</h2>
+    <p>Match and roster data is sourced from PandaScore, GRID, and Valve's public regional standings repository. No account information, IP addresses, or browsing activity is shared with these providers beyond what's needed to fetch match data.</p>
+
+    <h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mt-2">No tracking, no ads</h2>
+    <p>This site does not run analytics, advertising, or third-party trackers, and does not sell or share any data about visitors.</p>
+
+    <h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mt-2">Contact</h2>
+    <p>Questions about this policy can be sent to <a class="text-swedish-gold hover:underline" href="mailto:contact@rskcs2.github.io">contact@rskcs2.github.io</a>.</p>
+  </div>
+</main>
+
+<footer class="bg-deep-navy full-width mt-stack-lg border-t border-outline-variant/30">
+  <div class="w-full py-stack-lg px-container-padding max-w-[1200px] mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+    <div class="font-headline-lg-mobile text-headline-lg-mobile text-swedish-gold opacity-80 hover:opacity-100 transition-opacity">SweCS2</div>
+    <div class="flex flex-wrap justify-center gap-6">
+      <a class="font-metadata text-metadata text-on-surface-variant hover:text-on-surface transition-colors" href="terms">Terms of Service</a>
+      <a class="font-metadata text-metadata text-on-surface-variant hover:text-on-surface transition-colors" href="privacy" aria-current="page">Privacy Policy</a>
+      <a class="font-metadata text-metadata text-on-surface-variant hover:text-on-surface transition-colors" href="mailto:contact@rskcs2.github.io">Contact</a>
+    </div>
+    <div class="font-metadata text-metadata text-tertiary">© 2026 SweCS2</div>
+  </div>
+</footer>
+
+</body>
+</html>
