@@ -7,14 +7,21 @@
  *
  * Scheduled handler (cron): Fetches from PandaScore + GRID, stores in KV
  *
- * Secrets: PANDASCORE_TOKEN, GRID_TOKEN, WORKER_SECRET
+ * Secrets: PANDASCORE_TOKEN, GRID_TOKEN, WORKER_SECRET, TURNSTILE_SECRET
+ *   WORKER_SECRET now doubles as the HMAC signing key for session tokens
+ *   (it never leaves the Worker, so reusing it is fine)
  * KV Namespaces: MATCH_DATA
+ *
+ * POST /session → exchanges a Turnstile token for a short-lived signed
+ *   session token, used instead of a static shared secret
  */
 
 const ALLOWED_ORIGINS = ['https://rskcs2.github.io'];
 const GRID_CENTRAL    = 'https://api-op.grid.gg/central-data/graphql';
 const GRID_LIVE       = 'https://api-op.grid.gg/live-data-feed/series-state/graphql';
 const PANDA_BASE      = 'https://api.pandascore.co';
+const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+const SESSION_TTL_MS  = 30 * 60 * 1000; // must match SESSION_TTL_MS in shared.js
 
 // KV keys
 const KV_LIVE_DATA       = 'live_data';
@@ -70,18 +77,62 @@ function corsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin':  allowed,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-Worker-Secret',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Session-Token',
     'Access-Control-Max-Age':       '86400',
   };
 }
 
-function isAuthorized(request, env) {
-  const origin = request.headers.get('Origin') || '';
-  const secret = request.headers.get('X-Worker-Secret') || '';
+// ── SESSION TOKEN (HMAC-signed, replaces static X-Worker-Secret) ──────────
+// Format: "<expiryEpochMs>.<hexHmacSha256>"
+
+async function _hmacSign(message, secret) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  const sigBuf = await crypto.subtle.sign('HMAC', key, enc.encode(message));
+  return [...new Uint8Array(sigBuf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function _timingSafeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+async function createSessionToken(secret) {
+  const expiresAt = Date.now() + SESSION_TTL_MS;
+  const sig = await _hmacSign(String(expiresAt), secret);
+  return { session: `${expiresAt}.${sig}`, expiresAt };
+}
+
+async function verifySessionToken(token, secret) {
+  if (!token || !token.includes('.')) return false;
+  const [expiryStr, sig] = token.split('.');
+  const expiry = parseInt(expiryStr, 10);
+  if (!expiry || Date.now() > expiry) return false;
+  const expected = await _hmacSign(expiryStr, secret);
+  return _timingSafeEqual(sig, expected);
+}
+
+async function verifyTurnstileToken(token, secret, remoteIp) {
+  const res = await fetch(TURNSTILE_VERIFY_URL, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body:    new URLSearchParams({ secret, response: token, remoteip: remoteIp || '' }),
+  });
+  if (!res.ok) return false;
+  const data = await res.json();
+  return !!data.success;
+}
+
+async function isAuthorized(request, env) {
+  const origin  = request.headers.get('Origin') || '';
+  const session = request.headers.get('X-Session-Token') || '';
 
   if (!ALLOWED_ORIGINS.includes(origin)) return false;
-  if (secret !== env.WORKER_SECRET) return false;
-  return true;
+  return verifySessionToken(session, env.WORKER_SECRET);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -350,8 +401,39 @@ async function handleFetch(request, env) {
   if (request.method === 'OPTIONS')
     return new Response(null, { status: 204, headers: corsHeaders(origin) });
 
+  // Session exchange: no session token required yet, this is what mints one.
+  // Still origin-gated, and the Turnstile site key is itself bound to
+  // rskcs2.github.io, so tokens minted elsewhere won't verify anyway.
+  if (request.method === 'POST' && path === '/session') {
+    if (!ALLOWED_ORIGINS.includes(origin)) {
+      return new Response('Unauthorized', { status: 401, headers: corsHeaders(origin) });
+    }
+
+    let body;
+    try { body = await request.json(); } catch(_) { body = {}; }
+    const turnstileToken = body.token || '';
+    if (!turnstileToken) {
+      return new Response(JSON.stringify({ error: 'Missing token' }), {
+        status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+      });
+    }
+
+    const remoteIp = request.headers.get('CF-Connecting-IP') || '';
+    const verified = await verifyTurnstileToken(turnstileToken, env.TURNSTILE_SECRET, remoteIp);
+    if (!verified) {
+      return new Response(JSON.stringify({ error: 'Turnstile verification failed' }), {
+        status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+      });
+    }
+
+    const { session, expiresAt } = await createSessionToken(env.WORKER_SECRET);
+    return new Response(JSON.stringify({ session, expiresAt }), {
+      status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+    });
+  }
+
   // Reject unauthorized requests early
-  if (!isAuthorized(request, env)) {
+  if (!(await isAuthorized(request, env))) {
     return new Response('Unauthorized', { status: 401, headers: corsHeaders(origin) });
   }
 
