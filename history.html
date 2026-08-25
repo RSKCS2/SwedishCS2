@@ -241,6 +241,71 @@
       border-color: var(--accent-primary);
     }
 
+    .custom-range {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .custom-range.open {
+      display: flex;
+    }
+
+    .custom-range label {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+
+    .custom-range input[type="date"] {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 14px;
+      padding: 8px 10px;
+      color-scheme: dark;
+    }
+
+    .custom-range input[type="date"]:focus {
+      outline: none;
+      border-color: var(--accent-primary);
+    }
+
+    .custom-range button {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      padding: 9px 16px;
+      border-radius: 6px;
+      border: 1px solid var(--accent-primary);
+      background: rgba(255, 107, 53, 0.15);
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .custom-range button:hover {
+      background: rgba(255, 107, 53, 0.25);
+    }
+
+    .custom-range .clear-range {
+      border-color: var(--border);
+      background: transparent;
+      color: var(--text-secondary);
+    }
+
+    .custom-range .clear-range:hover {
+      color: var(--text-primary);
+      border-color: var(--text-secondary);
+      background: transparent;
+    }
+
     .stats-bar {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -824,6 +889,15 @@
       <button class="period-tab" onclick="setPeriod('month')">This Month</button>
       <button class="period-tab" onclick="setPeriod('week')">This Week</button>
       <button class="period-tab" onclick="setPeriod('day')">Today</button>
+      <button class="period-tab" id="custom-tab" onclick="toggleCustomRange()">Custom</button>
+    </div>
+    <div class="custom-range" id="custom-range">
+      <label for="custom-from">From</label>
+      <input type="date" id="custom-from" />
+      <label for="custom-to">To</label>
+      <input type="date" id="custom-to" />
+      <button onclick="applyCustomRange()">Apply</button>
+      <button class="clear-range" onclick="clearCustomRange()">Clear</button>
     </div>
     <div class="stats-bar">
       <div class="stat-item"><div class="stat-value" id="stat-total">—</div><div class="stat-label">Matches</div></div>
@@ -853,6 +927,8 @@ let allMatches   = [];
 let searchQuery  = '';
 let activePeriod = 'year';
 let currentPage  = 1;
+let customFrom   = null;
+let customTo     = null;
 
 window.addEventListener('DOMContentLoaded', () => {
   allMatches = loadAndPruneHistory();
@@ -899,6 +975,14 @@ function loadAndPruneHistory() {
 }
 
 function filterByPeriod(matches, period) {
+  if (period === 'custom') {
+    return matches.filter(m => {
+      const t = new Date(m.begin_at);
+      if (customFrom && t < customFrom) return false;
+      if (customTo && t > customTo) return false;
+      return true;
+    });
+  }
   const now = new Date();
   let start;
   switch(period) {
@@ -955,6 +1039,54 @@ function setPeriod(p) {
   currentPage = 1;
   document.querySelectorAll('.period-tab').forEach(btn => btn.classList.remove('active'));
   event.target.classList.add('active');
+  document.getElementById('custom-range').classList.remove('open');
+  renderResults();
+}
+
+function toggleCustomRange() {
+  const panel = document.getElementById('custom-range');
+  panel.classList.toggle('open');
+  if (panel.classList.contains('open')) {
+    document.querySelectorAll('.period-tab').forEach(btn => btn.classList.remove('active'));
+    document.getElementById('custom-tab').classList.add('active');
+  }
+}
+
+function applyCustomRange() {
+  const fromVal = document.getElementById('custom-from').value;
+  const toVal   = document.getElementById('custom-to').value;
+
+  customFrom = fromVal ? new Date(fromVal + 'T00:00:00') : null;
+  customTo   = toVal   ? new Date(toVal   + 'T23:59:59') : null;
+
+  if (!customFrom && !customTo) return;
+  if (customFrom && customTo && customFrom > customTo) {
+    // swap so the range always makes sense regardless of input order
+    [customFrom, customTo] = [customTo, customFrom];
+  }
+
+  activePeriod = 'custom';
+  currentPage = 1;
+  document.querySelectorAll('.period-tab').forEach(btn => btn.classList.remove('active'));
+  document.getElementById('custom-tab').classList.add('active');
+  renderResults();
+}
+
+function clearCustomRange() {
+  customFrom = null;
+  customTo   = null;
+  document.getElementById('custom-from').value = '';
+  document.getElementById('custom-to').value   = '';
+  document.getElementById('custom-range').classList.remove('open');
+  setPeriodDirect('year');
+}
+
+function setPeriodDirect(p) {
+  activePeriod = p;
+  currentPage = 1;
+  document.querySelectorAll('.period-tab').forEach(btn => btn.classList.remove('active'));
+  const target = [...document.querySelectorAll('.period-tab')].find(btn => btn.getAttribute('onclick') === `setPeriod('${p}')`);
+  if (target) target.classList.add('active');
   renderResults();
 }
 
