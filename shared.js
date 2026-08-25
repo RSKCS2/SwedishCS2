@@ -178,7 +178,7 @@ async function ensureSwedishData() {
       if (players.length < 100) break;
       page++;
     }
-    Object.values(_sweTeamData).forEach(d => { d.isFull = d.count >= 5; });
+    Object.values(_sweTeamData).forEach(d => { d.isFull = d.count >= 5; d.isMajority = d.count >= 3; });
     cacheSet('swe_players_v2', { teams: _sweTeamData, players: _swePlayers });
   } catch(e) { console.warn('[SWE] Failed to load Swedish player data:', e); }
   _sweLoaded = true;
@@ -243,10 +243,11 @@ function buildTeamProfiles(matches, cutoffMonths = 3) {
     [[t1, t2], [t2, t1]].forEach(([self, opp]) => {
       if (!self?.id || !sweInfo(self)) return;
       if (!profiles[self.id]) {
-        profiles[self.id] = { id: self.id, name: self.name, logo: self.image_url || null, matches: [], wins3m: 0, losses3m: 0 };
+        profiles[self.id] = { id: self.id, name: self.name, logo: self.image_url || null, location: self.location || null, matches: [], wins3m: 0, losses3m: 0 };
       }
       const p = profiles[self.id];
       if (self.image_url) p.logo = self.image_url;
+      if (self.location && !p.location) p.location = self.location;
       const { t1Maps, t2Maps } = extractMapScore(m);
       const selfMaps = self.id === t1?.id ? t1Maps : t2Maps;
       const oppMaps  = self.id === t1?.id ? t2Maps : t1Maps;

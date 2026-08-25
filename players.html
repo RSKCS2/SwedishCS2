@@ -101,7 +101,7 @@ let historyMatches = [];
 window.addEventListener('DOMContentLoaded', async () => {
   try {
     await ensureSwedishData();
-    allPlayers = getSwedishPlayers().slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    allPlayers = getSwedishPlayers().slice();
 
     const teamOptions = [...new Map(allPlayers.filter(p => p.current_team).map(p => [p.current_team.id, p.current_team.name])).entries()]
       .sort((a, b) => a[1].localeCompare(b[1]));
@@ -156,9 +156,21 @@ function recomputeRanks() {
 }
 
 function renderPlayers() {
-  let players = allPlayers;
+  let players = allPlayers.slice();
   if (teamFilterId) players = players.filter(p => String(p.current_team?.id) === String(teamFilterId));
   if (playerQuery) players = players.filter(p => (p.name || '').toLowerCase().includes(playerQuery));
+
+  // Always sorted by team rank (#1, #2, #3, …), never by name. Players
+  // whose team has no rank yet (still loading, or no match history) sort
+  // to the end, alphabetically among themselves so the order stays stable.
+  players.sort((a, b) => {
+    const ra = a.current_team ? teamRankMap[a.current_team.id] : null;
+    const rb = b.current_team ? teamRankMap[b.current_team.id] : null;
+    if (ra && rb) return ra - rb;
+    if (ra) return -1;
+    if (rb) return 1;
+    return (a.name || '').localeCompare(b.name || '');
+  });
 
   if (!players.length) {
     document.getElementById('content').innerHTML = `
@@ -174,9 +186,12 @@ function renderPlayers() {
 }
 
 function renderPlayerCard(p) {
-  const teamSwe = p.current_team ? sweInfo(p.current_team) : null;
-  const squadLabel = teamSwe ? (teamSwe.isFull ? 'Full Squad' : teamSwe.count + '/5 Swedish') : '';
   const rank = p.current_team ? teamRankMap[p.current_team.id] : null;
+  // Player-level stats aren't wired up to a data source yet — show 0s
+  // rather than hiding the row, so the layout doesn't jump once they are.
+  const rating = p.rating ?? 0;
+  const kd     = p.kd_ratio ?? 0;
+  const maps   = p.maps_played ?? 0;
 
   return `
   <div class="bg-deep-navy rounded-xl border border-outline-variant/30 hover:border-outline-variant/60 transition-colors overflow-hidden flex flex-col relative">
@@ -190,10 +205,22 @@ function renderPlayerCard(p) {
         </div>
       </div>
     </div>
-    <div class="p-4 flex flex-wrap gap-2 flex-1 items-center">
-      <span class="font-metadata text-metadata text-on-surface-variant flex items-center gap-1">🇸🇪 ${p.nationality || 'SE'}</span>
-      ${p.role ? `<span class="font-label-caps text-label-caps bg-surface-container-highest text-on-surface-variant px-2 py-1 rounded">${p.role}</span>` : ''}
-      ${squadLabel ? `<span class="font-label-caps text-label-caps bg-swedish-gold/10 text-swedish-gold px-2 py-1 rounded">${squadLabel}</span>` : ''}
+    <div class="p-4 flex flex-col gap-3 flex-1">
+      ${p.role ? `<span class="font-label-caps text-label-caps bg-surface-container-highest text-on-surface-variant px-2 py-1 rounded self-start">${p.role}</span>` : ''}
+      <div class="grid grid-cols-3 gap-2 text-center border-t border-outline-variant/10 pt-3">
+        <div>
+          <div class="font-bold text-sm text-on-surface">${rating}</div>
+          <div class="font-label-caps text-label-caps text-on-surface-variant">Rating</div>
+        </div>
+        <div>
+          <div class="font-bold text-sm text-on-surface">${kd}</div>
+          <div class="font-label-caps text-label-caps text-on-surface-variant">K/D</div>
+        </div>
+        <div>
+          <div class="font-bold text-sm text-on-surface">${maps}</div>
+          <div class="font-label-caps text-label-caps text-on-surface-variant">Maps</div>
+        </div>
+      </div>
     </div>
   </div>`;
 }

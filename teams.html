@@ -154,6 +154,9 @@ function renderTeams() {
 function renderTeamCard(team) {
   const info = sweInfo({ id: team.id }) || {};
   const squadLabel = info.isFull ? 'Full Squad' : info.count ? info.count + '/5 Swedish' : '';
+  const nationalityLine = info.isMajority
+    ? '🇸🇪 Sweden'
+    : (team.location ? `${countryFlag(team.location)} ${team.location.toUpperCase()}` : '🌐 International');
   const recent = team.matches.slice(0, 3);
   const sweRank   = sweValveRankMap[team.id] || null;
   const worldRank = findValveRank(valveGlobalCache, team.name)?.rank ?? null;
@@ -179,7 +182,7 @@ function renderTeamCard(team) {
         </div>
         <div class="min-w-0">
           <h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-bold truncate">${team.name}</h2>
-          <p class="font-metadata text-metadata text-on-surface-variant flex items-center gap-1">🇸🇪 Sweden</p>
+          <p class="font-metadata text-metadata text-on-surface-variant flex items-center gap-1">${nationalityLine}</p>
           <div class="flex gap-2 mt-1 flex-wrap">
             ${worldRank ? `<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container-highest px-1.5 py-0.5 rounded">WORLD #${worldRank}</span>` : ''}
             ${euRank ? `<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container-highest px-1.5 py-0.5 rounded">EU #${euRank}</span>` : ''}
