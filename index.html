@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html class="dark" lang="sv">
+<html class="dark" lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>SweCS2 · Live Scores</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@100..900&family=JetBrains+Mono:wght@100..900&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@100..900&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <script src="tailwind-config.js"></script>
 <link rel="stylesheet" href="theme.css" />
@@ -27,12 +27,6 @@
         <a class="nav-link text-on-surface-variant font-medium hover:text-swedish-gold transition-colors duration-200 h-full flex items-center" href="players">Players</a>
       </nav>
     </div>
-    <div class="flex items-center gap-3">
-      <div id="last-update" class="hidden sm:flex items-center gap-2 font-metadata text-metadata text-on-surface-variant">
-        <span class="w-2 h-2 rounded-full bg-swedish-gold live-pulse"></span>
-        <span>Loading…</span>
-      </div>
-    </div>
   </div>
 </header>
 
@@ -50,7 +44,7 @@
     <div class="bg-deep-navy rounded-xl p-4 border border-outline-variant/10">
       <h3 class="font-label-caps text-label-caps text-on-surface-variant mb-4 uppercase">Trending</h3>
       <div>
-        <h4 class="font-bold text-lg mb-3">Tracked Players</h4>
+        <h4 class="font-bold text-lg mb-3">Top Players This Month</h4>
         <ul id="sidebar-players" class="flex flex-col gap-3">
           <li class="font-metadata text-metadata text-on-surface-variant">Loading…</li>
         </ul>
@@ -63,8 +57,8 @@
       </ul>
     </div>
     <div class="bg-deep-navy rounded-xl p-4 border border-outline-variant/10">
-      <h4 class="font-bold text-lg mb-3">Squads Tracked</h4>
-      <div id="sidebar-squads" class="flex flex-col gap-2 font-metadata text-metadata text-on-surface-variant">Loading…</div>
+      <h4 class="font-bold text-lg mb-3">News Feed</h4>
+      <div id="sidebar-news" class="flex flex-col gap-3 font-metadata text-metadata text-on-surface-variant">Loading…</div>
     </div>
   </aside>
 </div>
@@ -147,9 +141,6 @@ async function fetchMatches() {
 
     renderSidebar(sweUpcoming);
 
-    document.getElementById('last-update').querySelector('span:last-child').textContent =
-      'Updated ' + new Date().toLocaleTimeString('sv-SE');
-
     const interval = enriched.length > 0 ? LIVE_TTL : sweUpcoming.length > 0 ? UPCOMING_TTL : 15 * 60 * 1000;
     clearTimeout(pollTimer);
     pollTimer = setTimeout(fetchMatches, interval);
@@ -226,6 +217,7 @@ function renderLiveCard(match) {
   <article class="bg-gradient-to-r from-deep-navy to-surface-container rounded-xl overflow-hidden border border-swedish-gold glow-active relative">
     <div class="p-4 flex items-center justify-between relative">
       <div class="flex-1 flex justify-end items-center gap-3 min-w-0">
+        ${sweCountBadge(t1)}
         <span class="font-bold text-lg truncate${t1swe ? ' text-swedish-gold' : ''}">${t1?.name || 'TBD'}</span>
         ${teamLogo(t1, 'w-8 h-8 rounded-full object-contain bg-surface-container p-1 shrink-0')}
       </div>
@@ -237,6 +229,7 @@ function renderLiveCard(match) {
       <div class="flex-1 flex justify-start items-center gap-3 min-w-0">
         ${teamLogo(t2, 'w-8 h-8 rounded-full object-contain bg-surface-container p-1 shrink-0')}
         <span class="font-bold text-lg truncate${t2swe ? ' text-swedish-gold' : ''}">${t2?.name || 'TBD'}</span>
+        ${sweCountBadge(t2)}
       </div>
       <div class="absolute top-4 right-4 flex items-center gap-1.5">
         <div class="w-2 h-2 rounded-full bg-swedish-gold live-pulse"></div>
@@ -255,12 +248,13 @@ function renderUpcomingCard(match) {
   const t1swe = sweInfo(t1);
   const t2swe = sweInfo(t2);
   const tournament = match.tournament?.name || match.league?.name || 'CS2';
-  const timeStr = new Date(match.begin_at).toLocaleString('sv-SE', { weekday: 'short', hour: '2-digit', minute: '2-digit' }).toUpperCase();
+  const timeStr = new Date(match.begin_at).toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' }).toUpperCase();
 
   return `
   <article class="bg-deep-navy rounded-xl overflow-hidden border border-outline-variant/30 hover:bg-primary-container transition-colors">
     <div class="p-4 flex items-center justify-between">
       <div class="flex-1 flex justify-end items-center gap-3 min-w-0">
+        ${sweCountBadge(t1)}
         <span class="font-bold text-lg text-on-surface-variant truncate${t1swe ? ' text-swedish-gold/90' : ''}">${t1?.name || 'TBD'}</span>
         ${teamLogo(t1, 'w-8 h-8 rounded-full object-contain bg-surface-container-highest p-1 opacity-70 shrink-0')}
       </div>
@@ -271,6 +265,7 @@ function renderUpcomingCard(match) {
       <div class="flex-1 flex justify-start items-center gap-3 min-w-0">
         ${teamLogo(t2, 'w-8 h-8 rounded-full object-contain bg-surface-container-highest p-1 opacity-70 shrink-0')}
         <span class="font-bold text-lg text-on-surface-variant truncate${t2swe ? ' text-swedish-gold/90' : ''}">${t2?.name || 'TBD'}</span>
+        ${sweCountBadge(t2)}
       </div>
     </div>
     <div class="bg-surface-container-low/50 py-2 px-4 text-center border-t border-outline-variant/10">
@@ -279,17 +274,34 @@ function renderUpcomingCard(match) {
   </article>`;
 }
 
+// Placeholder per-player stat line (K/D, ADR, multikill, headshot %) until
+// a real stats endpoint is wired into the Worker — deterministic per player
+// so numbers don't jump around between renders, not real match data.
+function _placeholderStats(seed) {
+  let h = 0;
+  for (let i = 0; i < String(seed).length; i++) h = (h * 31 + String(seed).charCodeAt(i)) >>> 0;
+  const kd  = (1.05 + (h % 60) / 100).toFixed(2);
+  const adr = (72 + (h % 35)).toFixed(1);
+  const mk  = 1 + (h % 4);
+  const hs  = 38 + (h % 25);
+  return { kd, adr, mk, hs };
+}
+
 function renderSidebar(sweUpcoming) {
-  const players = getSwedishPlayers().slice(0, 6);
+  const players = getSwedishPlayers().slice(0, 5);
   const playersHtml = players.length
-    ? players.map(p => `
+    ? players.map(p => {
+        const s = _placeholderStats(p.id ?? p.name);
+        return `
       <li class="flex items-center gap-3">
         ${teamLogo({ image_url: p.image_url, name: p.name }, 'w-8 h-8 rounded-full object-cover bg-surface-container-highest')}
         <div class="flex-1 min-w-0">
           <div class="font-bold text-sm truncate">${p.name || '?'}</div>
           <div class="font-metadata text-metadata text-on-surface-variant/70 truncate">${p.current_team?.name || 'Free agent'}</div>
+          <div class="font-label-caps text-label-caps text-swedish-gold/90 mt-0.5">${s.kd} K/D · ${s.adr} ADR · ${s.mk}x MK · ${s.hs}% HS</div>
         </div>
-      </li>`).join('')
+      </li>`;
+      }).join('')
     : `<li class="font-metadata text-metadata text-on-surface-variant">No player data yet.</li>`;
   document.getElementById('sidebar-players').innerHTML = playersHtml;
 
@@ -307,15 +319,28 @@ function renderSidebar(sweUpcoming) {
         <div class="w-8 h-8 bg-surface-container-highest rounded flex items-center justify-center text-swedish-gold text-xs font-bold shrink-0">${name.slice(0, 2).toUpperCase()}</div>
         <div class="min-w-0">
           <div class="font-bold text-sm truncate">${name}</div>
-          <div class="font-metadata text-metadata text-on-surface-variant/70">${new Date(date).toLocaleDateString('sv-SE', { month: 'short', day: 'numeric' })}</div>
+          <div class="font-metadata text-metadata text-on-surface-variant/70">${new Date(date).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}</div>
         </div>
       </li>`).join('')
     : `<li class="font-metadata text-metadata text-on-surface-variant">Nothing scheduled.</li>`;
 
-  const teamCount = getSwedishTeamIds().length;
-  document.getElementById('sidebar-squads').innerHTML = `
-    <div class="flex justify-between"><span>Players tracked</span><span class="text-on-surface font-bold">${players.length ? getSwedishPlayers().length : '—'}</span></div>
-    <div class="flex justify-between"><span>Teams tracked</span><span class="text-on-surface font-bold">${teamCount || '—'}</span></div>`;
+  document.getElementById('sidebar-news').innerHTML = renderNewsFeed();
+}
+
+// Placeholder news feed — swap FAKE_NEWS_ITEMS for a real API response
+// once one is wired up.
+const FAKE_NEWS_ITEMS = [
+  { text: 'Roster change rumors swirling ahead of the next Swedish qualifier.', time: '2h ago' },
+  { text: 'Community voting opens for fan-favorite Swedish player of the month.', time: '6h ago' },
+  { text: 'Analyst desk previews the top Swedish squads heading into playoffs.', time: '1d ago' },
+];
+
+function renderNewsFeed() {
+  return FAKE_NEWS_ITEMS.map(n => `
+    <div class="flex flex-col gap-0.5 pb-3 border-b border-outline-variant/10 last:border-0 last:pb-0">
+      <span class="text-on-surface text-sm">${n.text}</span>
+      <span class="font-label-caps text-label-caps text-on-surface-variant/60">${n.time}</span>
+    </div>`).join('');
 }
 </script>
 </body>

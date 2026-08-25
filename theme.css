@@ -3,8 +3,11 @@
    tailwind-config.js. Keep this file tiny; anything expressible as a
    Tailwind utility class belongs in the markup instead. */
 
+/* Matches the "surface-blue" / "on-surface" tokens in tailwind-config.js —
+   kept in sync so there's no flash of the old color before Tailwind's
+   CDN build applies the bg-surface-blue utility class. */
 body {
-  background-color: #111417;
+  background-color: #161B22;
   color: #e1e2e7;
 }
 

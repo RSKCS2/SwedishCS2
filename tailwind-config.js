@@ -83,7 +83,7 @@ tailwind.config = {
                         "Hanken Grotesk"
                 ],
                 "label-caps": [
-                        "JetBrains Mono"
+                        "Hanken Grotesk"
                 ],
                 "metadata": [
                         "Hanken Grotesk"

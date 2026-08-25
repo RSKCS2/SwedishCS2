@@ -395,8 +395,16 @@ function extractPicksInOrder(match) {
 function swePill(info, align = 'left') {
   if (!info) return '';
   const cls  = info.isFull ? 'full' : info.count >= 3 ? 'majority' : 'partial';
-  const text = info.isFull ? '🇸🇪 Fullt lag' : '🇸🇪 ' + info.count + '/5 ' + (info.count === 1 ? 'Svensk' : 'Svenskar');
+  const text = info.isFull ? '🇸🇪 Full Squad' : '🇸🇪 ' + info.count + '/5 Swedish';
   return `<span class="swe-pill ${cls}" style="${align==='right'?'align-self:flex-end':''}">${text}</span>`;
+}
+
+// Small inline badge showing how many current Swedish players are on a
+// team, e.g. "3/5 SWE". Returns '' for teams with no Swedish players.
+function sweCountBadge(team, cls = '') {
+  const info = team ? sweInfo(team) : null;
+  if (!info || !info.count) return '';
+  return `<span class="font-label-caps text-label-caps text-swedish-gold/90 bg-swedish-gold/10 px-1.5 py-0.5 rounded shrink-0 ${cls}">${info.count}/5 SWE</span>`;
 }
 
 // ── LOGO CACHE ────────────────────────────────────────────────────────────
@@ -439,6 +447,33 @@ function formatMapName(raw) {
 function countryFlag(code) {
   if (!code || code.length !== 2) return '';
   return [...code.toUpperCase()].map(c => String.fromCodePoint(0x1F1E6 - 65 + c.charCodeAt(0))).join('');
+}
+
+// ── SHARE BUTTON ──────────────────────────────────────────────────────────
+async function sharePage(title) {
+  const url = window.location.href;
+  if (navigator.share) {
+    try { await navigator.share({ title: title || document.title, url }); return; } catch(_) { /* user cancelled, ignore */ }
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    _flashShareToast();
+  } catch(_) {}
+}
+
+function _flashShareToast() {
+  let el = document.getElementById('share-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'share-toast';
+    el.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-deep-navy border border-swedish-gold text-on-surface font-metadata text-metadata px-4 py-2 rounded-full z-[100] shadow-lg transition-opacity duration-300';
+    document.body.appendChild(el);
+  }
+  el.textContent = 'Link copied to clipboard';
+  el.style.opacity = '1';
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(() => { el.style.opacity = '0'; }, 2000);
 }
 
 function teamLocationBadge(team) {

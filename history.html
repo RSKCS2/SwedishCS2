@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html class="dark" lang="sv">
+<html class="dark" lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>SweCS2 · Match History</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@100..900&family=JetBrains+Mono:wght@100..900&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@100..900&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <script src="tailwind-config.js"></script>
 <link rel="stylesheet" href="theme.css" />
@@ -14,9 +14,9 @@
   .period-tab[aria-pressed="true"] { background: rgba(230, 194, 0, 0.15); border-color: #E6C200; color: #e1e2e7; }
 </style>
 </head>
-<body class="bg-background text-on-surface font-body-md antialiased min-h-screen flex flex-col">
+<body class="bg-surface-blue text-on-surface font-body-md antialiased min-h-screen flex flex-col">
 
-<nav class="bg-surface/80 backdrop-blur-xl font-body-md text-body-md full-width top-0 sticky z-50 flex justify-between items-center w-full px-container-padding max-w-[1200px] mx-auto h-16 border-b border-outline-variant/20">
+<nav class="bg-surface-blue/80 backdrop-blur-xl font-body-md text-body-md full-width top-0 sticky z-50 flex justify-between items-center w-full px-container-padding max-w-[1200px] mx-auto h-16 border-b border-outline-variant/20">
   <div class="flex items-center gap-6">
     <a href="./" class="font-headline-lg text-headline-lg font-extrabold text-swedish-gold tracking-tighter flex items-center gap-2">
       <svg width="22" height="22" viewBox="0 0 32 32" class="shrink-0"><rect width="32" height="32" rx="6" fill="#002244"/><rect y="12" width="32" height="8" fill="#E6C200"/><rect x="12" width="8" height="32" fill="#E6C200"/></svg>
@@ -29,11 +29,17 @@
       <a class="nav-link text-on-surface-variant font-medium hover:text-swedish-gold transition-colors duration-200" href="players">Players</a>
     </div>
   </div>
-  <div class="relative hidden md:block">
-    <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
-    <input id="search-input" type="text" autocomplete="off"
-      class="bg-surface-container text-on-surface border border-outline-variant/30 rounded-full pl-9 pr-4 py-1.5 focus:outline-none focus:border-swedish-gold font-metadata text-sm w-64"
-      placeholder="Search teams or tournaments…" oninput="onSearch(this.value)" />
+  <div class="hidden md:flex items-center gap-2">
+    <div class="relative">
+      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+      <input id="search-input" type="text" autocomplete="off"
+        class="bg-deep-navy text-on-surface border border-outline-variant/30 rounded-full pl-9 pr-4 py-1.5 focus:outline-none focus:border-swedish-gold font-metadata text-sm w-64"
+        placeholder="Search teams or tournaments…" oninput="onSearch(this.value)" />
+    </div>
+    <button type="button" onclick="sharePage('SweCS2 · Match History')" aria-label="Share this page"
+      class="w-9 h-9 flex items-center justify-center rounded-full bg-deep-navy border border-outline-variant/30 text-on-surface-variant hover:text-swedish-gold hover:border-swedish-gold transition-colors shrink-0">
+      <span class="material-symbols-outlined text-lg">share</span>
+    </button>
   </div>
 </nav>
 
@@ -47,30 +53,46 @@
     <div class="relative md:hidden">
       <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
       <input type="text" autocomplete="off"
-        class="w-full bg-surface-container text-on-surface border border-outline-variant/30 rounded-full pl-9 pr-4 py-2 focus:outline-none focus:border-swedish-gold font-metadata text-sm"
+        class="w-full bg-deep-navy text-on-surface border border-outline-variant/30 rounded-full pl-9 pr-4 py-2 focus:outline-none focus:border-swedish-gold font-metadata text-sm"
         placeholder="Search teams or tournaments…" oninput="onSearch(this.value)" />
     </div>
 
-    <div class="bg-surface-container rounded-xl p-4 border border-outline-variant/20 flex flex-wrap gap-2 items-center">
+    <div class="bg-deep-navy rounded-xl p-4 border border-outline-variant/20 flex flex-wrap gap-2 items-center">
       <span class="font-label-caps text-label-caps text-on-surface-variant mr-2">PERIOD:</span>
       <div id="period-tabs" class="flex flex-wrap gap-2"></div>
     </div>
 
+    <div id="custom-date-range" class="hidden bg-deep-navy rounded-xl p-4 border border-outline-variant/20 flex flex-wrap gap-4 items-center">
+      <span class="font-label-caps text-label-caps text-on-surface-variant">CUSTOM RANGE:</span>
+      <label class="flex items-center gap-2 text-sm text-on-surface-variant">
+        From
+        <input id="custom-date-start" type="date"
+          class="bg-surface-container-high border border-outline-variant/30 text-on-surface text-sm rounded-md py-1.5 px-2 focus:outline-none focus:border-swedish-gold"
+          onchange="onCustomDateChange()" />
+      </label>
+      <label class="flex items-center gap-2 text-sm text-on-surface-variant">
+        To
+        <input id="custom-date-end" type="date"
+          class="bg-surface-container-high border border-outline-variant/30 text-on-surface text-sm rounded-md py-1.5 px-2 focus:outline-none focus:border-swedish-gold"
+          onchange="onCustomDateChange()" />
+      </label>
+    </div>
+
     <div id="stats-section" class="hidden">
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div class="bg-surface-container rounded-lg p-4 text-center border border-outline-variant/20">
+        <div class="bg-deep-navy rounded-lg p-4 text-center border border-outline-variant/20">
           <div class="font-match-score text-match-score text-on-surface" id="stat-total">—</div>
           <div class="font-label-caps text-label-caps text-on-surface-variant mt-1">Matches</div>
         </div>
-        <div class="bg-surface-container rounded-lg p-4 text-center border border-outline-variant/20">
+        <div class="bg-deep-navy rounded-lg p-4 text-center border border-outline-variant/20">
           <div class="font-match-score text-match-score text-swedish-gold" id="stat-wins">—</div>
           <div class="font-label-caps text-label-caps text-on-surface-variant mt-1">SWE Wins</div>
         </div>
-        <div class="bg-surface-container rounded-lg p-4 text-center border border-outline-variant/20">
+        <div class="bg-deep-navy rounded-lg p-4 text-center border border-outline-variant/20">
           <div class="font-match-score text-match-score text-error" id="stat-losses">—</div>
           <div class="font-label-caps text-label-caps text-on-surface-variant mt-1">SWE Losses</div>
         </div>
-        <div class="bg-surface-container rounded-lg p-4 text-center border border-outline-variant/20">
+        <div class="bg-deep-navy rounded-lg p-4 text-center border border-outline-variant/20">
           <div class="font-match-score text-match-score text-tertiary" id="stat-winrate">—</div>
           <div class="font-label-caps text-label-caps text-on-surface-variant mt-1">Win Rate</div>
         </div>
@@ -86,7 +108,7 @@
   </section>
 </main>
 
-<footer class="bg-surface-container-lowest full-width mt-stack-lg border-t border-outline-variant/30">
+<footer class="bg-deep-navy full-width mt-stack-lg border-t border-outline-variant/30">
   <div class="w-full py-stack-lg px-container-padding max-w-[1200px] mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
     <div class="font-headline-lg-mobile text-headline-lg-mobile text-swedish-gold font-extrabold tracking-tighter">SweCS2</div>
     <div class="flex flex-wrap justify-center gap-6">
@@ -103,19 +125,22 @@
 <script src="shared.js"></script>
 <script>
 const PERIODS = [
-  ['year',  'This Year'],
-  ['9m',    '9 Months'],
-  ['6m',    '6 Months'],
-  ['3m',    '3 Months'],
-  ['month', 'This Month'],
-  ['week',  'This Week'],
-  ['day',   'Today'],
+  ['month',  'This Month'],
+  ['3m',     '3 Months'],
+  ['week',   'This Week'],
+  ['day',    'Today'],
+  ['6m',     '6 Months'],
+  ['9m',     '9 Months'],
+  ['year',   'This Year'],
+  ['custom', 'Custom Date'],
 ];
 const PAGE_SIZE = 25;
 
 let allMatches  = [];
 let searchQuery = '';
-let activePeriod = 'year';
+let activePeriod = 'month';
+let customStart  = '';
+let customEnd    = '';
 let currentPage  = 1;
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -150,6 +175,17 @@ function filterByPeriod(matches, period) {
     case 'month':   start = new Date(now.getFullYear(), now.getMonth(), 1); break;
     case 'week':    start = new Date(now); start.setDate(now.getDate() - now.getDay()); break;
     case 'day':     start = new Date(now); start.setHours(0,0,0,0); break;
+    case 'custom': {
+      const startD = customStart ? new Date(customStart) : null;
+      const endD   = customEnd ? new Date(customEnd) : null;
+      if (endD) endD.setHours(23, 59, 59, 999);
+      return matches.filter(m => {
+        const d = new Date(m.begin_at);
+        if (startD && d < startD) return false;
+        if (endD && d > endD) return false;
+        return true;
+      });
+    }
     default:        start = new Date(0);
   }
   return matches.filter(m => new Date(m.begin_at) >= start);
@@ -196,6 +232,14 @@ function setPeriod(p) {
   currentPage = 1;
   document.querySelectorAll('.period-tab').forEach(btn => btn.setAttribute('aria-pressed', 'false'));
   event.target.setAttribute('aria-pressed', 'true');
+  document.getElementById('custom-date-range').classList.toggle('hidden', p !== 'custom');
+  renderResults();
+}
+
+function onCustomDateChange() {
+  customStart = document.getElementById('custom-date-start').value;
+  customEnd   = document.getElementById('custom-date-end').value;
+  currentPage = 1;
   renderResults();
 }
 
@@ -232,7 +276,7 @@ function renderResults() {
   let lastDate = '';
 
   paginated.forEach(m => {
-    const dateKey = new Date(m.begin_at).toLocaleDateString('sv-SE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const dateKey = new Date(m.begin_at).toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     if (dateKey !== lastDate) {
       html += `<h3 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface uppercase tracking-wide mt-stack-md first:mt-0">${dateKey}</h3>`;
       lastDate = dateKey;
@@ -268,29 +312,33 @@ function renderCard(match) {
   const { t1Maps, t2Maps } = extractMapScore(match);
   const t1Win = match.winner?.id === t1?.id;
   const t2Win = match.winner?.id === t2?.id;
+  const t1ScoreCls = t1swe ? (t1Win ? 'text-green-400' : 'text-red-400') : (t1Win ? 'text-swedish-gold' : 'text-on-surface-variant');
+  const t2ScoreCls = t2swe ? (t2Win ? 'text-green-400' : 'text-red-400') : (t2Win ? 'text-swedish-gold' : 'text-on-surface-variant');
   const tournament = match.tournament?.name || match.league?.name || 'CS2';
   const bo = match.number_of_games ? 'Bo' + match.number_of_games : '';
-  const timeStr = new Date(match.begin_at).toLocaleString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+  const timeStr = new Date(match.begin_at).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
   return `
-  <div class="match-card ${t1Win || t2Win ? 'glow-outline border-swedish-gold' : 'border-outline-variant/20'} bg-surface-container rounded-xl border overflow-hidden flex flex-col relative transition-colors">
+  <div class="match-card ${t1Win || t2Win ? 'glow-outline border-swedish-gold' : 'border-outline-variant/20'} bg-deep-navy rounded-xl border overflow-hidden flex flex-col relative transition-colors">
     <div class="flex items-center justify-between p-4 md:px-6">
       <div class="flex items-center gap-4 w-1/4">
         <span class="font-label-caps text-label-caps text-on-surface-variant border-r border-outline-variant/30 pr-4">${timeStr}</span>
       </div>
       <div class="flex items-center justify-center gap-4 md:gap-8 w-2/4 min-w-0">
         <div class="flex items-center gap-3 justify-end w-2/5 min-w-0">
+          ${sweCountBadge(t1)}
           <span class="font-bold text-lg text-on-surface hidden md:block truncate${t1swe ? ' text-swedish-gold' : ''}">${t1?.name || 'TBD'}</span>
           ${teamLogo(t1, 'w-8 h-8 rounded-full object-contain bg-surface-variant p-1 shrink-0')}
         </div>
         <div class="font-match-score text-match-score flex items-center gap-2 shrink-0">
-          <span class="${t1Win ? 'text-swedish-gold' : 'text-on-surface-variant'}">${t1Maps}</span>
+          <span class="${t1ScoreCls}">${t1Maps}</span>
           <span class="text-on-surface-variant">-</span>
-          <span class="${t2Win ? 'text-swedish-gold' : 'text-on-surface-variant'}">${t2Maps}</span>
+          <span class="${t2ScoreCls}">${t2Maps}</span>
         </div>
         <div class="flex items-center gap-3 justify-start w-2/5 min-w-0">
           ${teamLogo(t2, 'w-8 h-8 rounded-full object-contain bg-surface-variant p-1 shrink-0')}
           <span class="font-bold text-lg text-on-surface hidden md:block truncate${t2swe ? ' text-swedish-gold' : ''}">${t2?.name || 'TBD'}</span>
+          ${sweCountBadge(t2)}
         </div>
       </div>
       <div class="w-1/4 flex justify-end">

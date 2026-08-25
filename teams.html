@@ -1,19 +1,19 @@
 <!DOCTYPE html>
-<html class="dark" lang="sv">
+<html class="dark" lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>SweCS2 · Teams</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@100..900&family=JetBrains+Mono:wght@100..900&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@100..900&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <script src="tailwind-config.js"></script>
 <link rel="stylesheet" href="theme.css" />
 </head>
-<body class="bg-background text-on-surface font-body-md min-h-screen flex flex-col">
+<body class="bg-surface-blue text-on-surface font-body-md min-h-screen flex flex-col">
 
-<nav class="bg-surface/80 backdrop-blur-xl full-width top-0 sticky z-50 border-b border-outline-variant/20">
+<nav class="bg-surface-blue/80 backdrop-blur-xl full-width top-0 sticky z-50 border-b border-outline-variant/20">
   <div class="flex justify-between items-center w-full px-container-padding max-w-[1200px] mx-auto h-16">
     <div class="flex items-center gap-8">
       <a href="./" class="font-headline-lg text-headline-lg font-extrabold text-swedish-gold tracking-tighter flex items-center gap-2">
@@ -27,11 +27,17 @@
         <a class="nav-link text-on-surface-variant font-medium hover:text-swedish-gold transition-colors duration-200" href="players">Players</a>
       </div>
     </div>
-    <div class="relative hidden md:block">
-      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
-      <input id="team-search" type="text" autocomplete="off"
-        class="bg-surface-container-high border border-outline-variant/30 rounded-full py-1.5 pl-9 pr-4 text-sm text-on-surface focus:outline-none focus:border-swedish-gold w-64"
-        placeholder="Search teams…" oninput="onTeamSearch(this.value)" />
+    <div class="hidden md:flex items-center gap-2">
+      <div class="relative">
+        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+        <input id="team-search" type="text" autocomplete="off"
+          class="bg-surface-container-high border border-outline-variant/30 rounded-full py-1.5 pl-9 pr-4 text-sm text-on-surface focus:outline-none focus:border-swedish-gold w-64"
+          placeholder="Search teams…" oninput="onTeamSearch(this.value)" />
+      </div>
+      <button type="button" onclick="sharePage('SweCS2 · Teams')" aria-label="Share this page"
+        class="w-9 h-9 flex items-center justify-center rounded-full bg-surface-container-high border border-outline-variant/30 text-on-surface-variant hover:text-swedish-gold hover:border-swedish-gold transition-colors shrink-0">
+        <span class="material-symbols-outlined text-lg">share</span>
+      </button>
     </div>
   </div>
 </nav>
@@ -54,7 +60,7 @@
   </main>
 </div>
 
-<footer class="bg-surface-container-lowest full-width mt-stack-lg border-t border-outline-variant/30">
+<footer class="bg-deep-navy full-width mt-stack-lg border-t border-outline-variant/30">
   <div class="w-full py-stack-lg px-container-padding max-w-[1200px] mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
     <div class="font-headline-lg-mobile text-headline-lg-mobile text-swedish-gold font-bold">SweCS2</div>
     <div class="flex flex-wrap justify-center gap-6">
@@ -130,13 +136,13 @@ function renderTeamCard(team) {
     ? recent.map(m => `
       <div class="flex justify-between items-center text-sm">
         <span class="text-on-surface w-24 truncate">vs ${m.oppName}</span>
-        <span class="font-bold ${m.won ? 'text-swedish-gold' : 'text-on-surface-variant'}">${m.selfMaps} - ${m.oppMaps}</span>
-        <span class="${m.won ? 'text-tertiary' : 'text-error'} font-bold w-4 text-right">${m.won ? 'W' : 'L'}</span>
+        <span class="font-bold ${m.won ? 'text-green-400' : 'text-red-400'}">${m.selfMaps} - ${m.oppMaps}</span>
+        <span class="${m.won ? 'text-green-400' : 'text-red-400'} font-bold w-4 text-right">${m.won ? 'W' : 'L'}</span>
       </div>`).join('')
     : `<div class="text-sm text-on-surface-variant">No recorded matches yet.</div>`;
 
   return `
-  <article class="bg-surface-container border border-outline-variant/20 rounded-xl p-4 flex flex-col gap-4 glow-card transition-all duration-300 relative overflow-hidden group">
+  <article class="bg-deep-navy border border-outline-variant/20 rounded-xl p-4 flex flex-col gap-4 glow-card transition-all duration-300 relative overflow-hidden group">
     <div class="absolute inset-0 bg-gradient-to-br from-swedish-gold/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
     <div class="flex justify-between items-start z-10">
       <div class="flex items-center gap-4 min-w-0">
