@@ -476,6 +476,102 @@ function _flashShareToast() {
   el._hideTimer = setTimeout(() => { el.style.opacity = '0'; }, 2000);
 }
 
+// Orders two teams so the Swedish side renders on the left, unless both or
+// neither team is Swedish (in which case the original order is kept).
+function orderBySwedish(t1, t2) {
+  const t1swe = !!sweInfo(t1);
+  const t2swe = !!sweInfo(t2);
+  if (t2swe && !t1swe) return [t2, t1];
+  return [t1, t2];
+}
+
+// ── VALVE REGIONAL STANDINGS (world/EU rank source) ───────────────────────
+// Reads Valve's own published CS2 Regional Standings from the GitHub repo
+// so team rank badges reflect Valve's official numbers rather than our own
+// derived win/loss form. Falls back gracefully (returns null / empty) if
+// GitHub is unreachable — callers should treat a null rank as "unranked"
+// rather than an error.
+const VALVE_REPO_API   = 'https://api.github.com/repos/ValveSoftware/counter-strike_regional_standings/contents';
+const VALVE_CACHE_TTL  = 24 * 60 * 60 * 1000; // Valve publishes on a roughly weekly cadence
+
+function _valveCacheKey(region, dateStr) {
+  return `valve_standings_${region}_${dateStr || 'latest'}`;
+}
+
+// Lists available snapshot files (e.g. standings_global_2026_08_03.md) for
+// a region across the given years, newest first.
+async function listValveStandingsDates(region = 'global', years = null) {
+  const cacheKey = `valve_dates_${region}`;
+  const cached = cacheGet(cacheKey, VALVE_CACHE_TTL);
+  if (cached) return cached;
+
+  const yearList = years || [new Date().getFullYear(), new Date().getFullYear() - 1];
+  const all = [];
+  for (const year of yearList) {
+    try {
+      const res = await fetch(`${VALVE_REPO_API}/live/${year}`, { headers: { Accept: 'application/vnd.github+json' } });
+      if (!res.ok) continue;
+      const files = await res.json();
+      if (!Array.isArray(files)) continue;
+      files.forEach(f => {
+        const m = f.name.match(new RegExp(`^standings_${region}_(\\d{4}_\\d{2}_\\d{2})\\.md$`));
+        if (m) all.push({ date: m[1], name: f.name, download_url: f.download_url });
+      });
+    } catch(_) { /* ignore a missing/unreachable year directory */ }
+  }
+  all.sort((a, b) => b.date.localeCompare(a.date)); // newest first
+  if (all.length) cacheSet(cacheKey, all);
+  return all;
+}
+
+// Parses a Valve standings markdown table into [{ rank, points, name, roster }, …]
+function _parseValveStandingsMarkdown(md) {
+  const rows = [];
+  md.split('\n').forEach(line => {
+    const m = line.match(/^\|\s*(\d+)\s*\|\s*(-?\d+)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|/);
+    if (!m) return;
+    rows.push({
+      rank:   parseInt(m[1], 10),
+      points: parseInt(m[2], 10),
+      name:   m[3].trim(),
+      roster: m[4].split(',').map(s => s.trim()).filter(Boolean),
+    });
+  });
+  return rows;
+}
+
+// Fetches (and caches) a specific dated snapshot, or the latest one if no
+// date is given. Returns [] on any failure so callers can degrade quietly.
+async function fetchValveStandings(region = 'global', dateStr = null) {
+  const key = _valveCacheKey(region, dateStr);
+  const cached = cacheGet(key, VALVE_CACHE_TTL);
+  if (cached) return cached;
+
+  try {
+    const dates = await listValveStandingsDates(region);
+    if (!dates.length) return [];
+    const entry = dateStr ? dates.find(d => d.date === dateStr) : dates[0];
+    if (!entry) return [];
+    const res = await fetch(entry.download_url);
+    if (!res.ok) return [];
+    const md = await res.text();
+    const parsed = _parseValveStandingsMarkdown(md);
+    cacheSet(key, parsed);
+    return parsed;
+  } catch(e) {
+    console.warn('[VALVE] Failed to fetch standings:', e);
+    return [];
+  }
+}
+
+// Finds a team's entry in a Valve standings list by fuzzy name match
+// (reuses the same normalization used for GRID team matching).
+function findValveRank(list, teamName) {
+  const target = normName(teamName);
+  if (!target || !list.length) return null;
+  return list.find(t => normName(t.name) === target) || null;
+}
+
 function teamLocationBadge(team) {
   if (!team?.location) return '';
   const code = team.location.toUpperCase();
