@@ -418,6 +418,16 @@ async function handleFetch(request, env) {
     }
 
     const remoteIp = request.headers.get('CF-Connecting-IP') || '';
+
+    // TEMPORARY: confirm the secret is actually bound before calling out to Turnstile.
+    if (!env.TURNSTILE_SECRET) {
+      return new Response(JSON.stringify({
+        error: 'TURNSTILE_SECRET is not set on this Worker (env.TURNSTILE_SECRET is falsy)',
+      }), {
+        status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+      });
+    }
+
     const verifyData = await verifyTurnstileToken(turnstileToken, env.TURNSTILE_SECRET, remoteIp);
     if (!verifyData.success) {
       // TEMPORARY: echoing Turnstile's error codes back to diagnose the 403.
