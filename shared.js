@@ -267,16 +267,25 @@ async function ensureTeamCountries(teamIds) {
   const missing = [...new Set(teamIds)].filter(id => id && !(id in cache));
   if (!missing.length) return cache;
 
+  let dirty = false;
   await Promise.all(missing.map(async id => {
     try {
       const team = await pandaFetch(`/csgo/teams/${id}`);
       cache[id] = classifyTeamCountry(team?.players);
+      dirty = true;
     } catch(e) {
-      cache[id] = { type: 'international' };
+      // Leave this id out of the cache on failure instead of writing
+      // { type: 'international' } — a Worker hiccup or rate limit isn't
+      // the same fact as "this team really is international", and
+      // caching it for 24h made a transient failure look permanent.
+      // teamCountryLine() already falls back to the globe icon for any
+      // uncached id, so the UI degrades the same way either way; the
+      // only difference is we retry on the next page load instead of
+      // being stuck until the cache expires.
       console.warn('[SWE] Could not fetch roster for team', id, e);
     }
   }));
-  _saveTeamCountryCache();
+  if (dirty) _saveTeamCountryCache();
   return cache;
 }
 

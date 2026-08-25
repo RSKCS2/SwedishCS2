@@ -189,6 +189,27 @@ async function fetchUpcomingMatches(token) {
   return fetchPandascoreWithPagination(url, token, 1);
 }
 
+// Single-team roster lookup, used by shared.js's classifyTeamCountry() to
+// work out a non-Swedish team's roster nationality (e.g. MIBR, G2 Ares).
+// Not part of the scheduled KV snapshot since it's only needed for teams
+// as they show up in the UI, so this fetches PandaScore directly and
+// caches the result in KV with its own TTL.
+const TEAM_ROSTER_CACHE_TTL_S = 24 * 60 * 60; // seconds, for KV expirationTtl
+
+async function fetchTeamRoster(teamId, token, env) {
+  const kvKey = `team_roster_${teamId}`;
+  const cached = await env.MATCH_DATA.get(kvKey);
+  if (cached) return JSON.parse(cached);
+
+  const res = await fetch(`${PANDA_BASE}/csgo/teams/${teamId}`, {
+    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+  });
+  if (!res.ok) throw new Error(`PandaScore team fetch failed: ${res.status}`);
+  const data = await res.json();
+  await env.MATCH_DATA.put(kvKey, JSON.stringify(data), { expirationTtl: TEAM_ROSTER_CACHE_TTL_S });
+  return data;
+}
+
 async function fetchSwedishTeamMatches(teamId, token) {
   // Use filter[opponent_id] instead of filter[team_id]
   // Include opponents, results, and sort by -end_at (newest first)
@@ -489,7 +510,18 @@ async function handleFetch(request, env) {
 
     let data = null;
 
-    if (path.includes('/players')) {
+    if (path.startsWith('/csgo/teams/')) {
+      const teamId = path.split('/')[3];
+      try {
+        data = await fetchTeamRoster(teamId, env.PANDASCORE_TOKEN, env);
+      } catch (err) {
+        console.error(`Team roster fetch error: ${err.message}`);
+        return new Response(
+          JSON.stringify({ error: 'Could not fetch team roster' }),
+          { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } }
+        );
+      }
+    } else if (path.includes('/players')) {
       // Serve players from live_data with pagination support
       const liveDataJson = await env.MATCH_DATA.get(KV_LIVE_DATA);
       if (liveDataJson) {
