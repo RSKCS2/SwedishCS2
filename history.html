@@ -1045,7 +1045,7 @@ function renderCard(match, delay) {
       <div class="result-tournament" title="${tournament}">${tournament}</div>
       <div class="result-teams">
         <div class="rt">
-          <div class="rt-namerow">${teamLogo(t1)}<span class="rt-name${t1Win ? ' winner' : ''}${t1swe ? ' swe-hl' : ''}">${t1?.name || 'TBD'}</span></div>
+          <div class="rt-namerow">${teamLogo(t1, 'rt-logo')}<span class="rt-name${t1Win ? ' winner' : ''}${t1swe ? ' swe-hl' : ''}">${t1?.name || 'TBD'}</span></div>
           ${swePill(t1swe)}
         </div>
         <div class="result-score">
@@ -1053,7 +1053,7 @@ function renderCard(match, delay) {
           <div class="rs-label">BO${match.number_of_games || '?'}</div>
         </div>
         <div class="rt right">
-          <div class="rt-namerow">${teamLogo(t2)}<span class="rt-name${t2Win ? ' winner' : ''}${t2swe ? ' swe-hl' : ''}">${t2?.name || 'TBD'}</span></div>
+          <div class="rt-namerow">${teamLogo(t2, 'rt-logo')}<span class="rt-name${t2Win ? ' winner' : ''}${t2swe ? ' swe-hl' : ''}">${t2?.name || 'TBD'}</span></div>
           ${swePill(t2swe, 'right')}
         </div>
       </div>
