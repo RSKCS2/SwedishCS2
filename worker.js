@@ -544,13 +544,11 @@ async function handleFetch(request, env) {
   return new Response('Method not allowed', { status: 405 });
 }
 
-// TOP-LEVEL named exports for Cloudflare Workers
-export async function scheduled(event, env) {
-  await handleScheduled(env);
-}
-
 export default {
   async fetch(request, env) {
     return handleFetch(request, env);
+  },
+  async scheduled(event, env) {
+    await handleScheduled(env);
   },
 };
