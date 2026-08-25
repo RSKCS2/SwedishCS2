@@ -7,7 +7,7 @@
  *   swe_history        Accumulated past matches (grows forever, never deleted)
  */
 const WORKER_URL         = 'https://floral-moon-0400.epicminecraftboy12.workers.dev';
-const TURNSTILE_SITE_KEY = 'PASTE_YOUR_TURNSTILE_SITE_KEY_HERE';
+const TURNSTILE_SITE_KEY = '0x4AAAAAAEau1bQWCYwLDKfv';
 const SESSION_TTL_MS     = 30 * 60 * 1000; // must match the Worker's expiry window
 const SESSION_STORE_KEY  = 'swe_session';
 
