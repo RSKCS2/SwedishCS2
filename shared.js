@@ -7,7 +7,7 @@
  *   swe_history        Accumulated past matches (grows forever, never deleted)
  */
 const WORKER_URL         = 'https://floral-moon-0400.epicminecraftboy12.workers.dev';
-const TURNSTILE_SITE_KEY = '0x4AAAAAAEau1bQWCYwLDKfv';
+const TURNSTILE_SITE_KEY = 'PASTE_YOUR_TURNSTILE_SITE_KEY_HERE';
 const SESSION_TTL_MS     = 30 * 60 * 1000; // must match the Worker's expiry window
 const SESSION_STORE_KEY  = 'swe_session';
 
@@ -48,9 +48,28 @@ function _initTurnstileWidget() {
   });
 }
 
-function _getTurnstileToken() {
+// turnstile.js loads with async/defer, so it can finish downloading after
+// our own code has already started running. Poll briefly instead of
+// assuming it is ready.
+function _waitForTurnstile(timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
-    if (typeof turnstile === 'undefined') { reject(new Error('Turnstile script not loaded')); return; }
+    if (typeof turnstile !== 'undefined') { resolve(); return; }
+    const start = Date.now();
+    const iv = setInterval(() => {
+      if (typeof turnstile !== 'undefined') {
+        clearInterval(iv);
+        resolve();
+      } else if (Date.now() - start > timeoutMs) {
+        clearInterval(iv);
+        reject(new Error('Turnstile script failed to load'));
+      }
+    }, 100);
+  });
+}
+
+async function _getTurnstileToken() {
+  await _waitForTurnstile();
+  return new Promise((resolve, reject) => {
     _initTurnstileWidget();
     _turnstilePendingResolve = resolve;
     _turnstilePendingReject  = reject;
