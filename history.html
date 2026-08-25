@@ -936,12 +936,12 @@ function computeStats(matches) {
       total++;
       if (m.winner) {
         if ((t1swe && m.winner.id === t1?.id) || (t2swe && m.winner.id === t2?.id)) sweWins++;
-        else sweL osses++;
+        else sweLosses++;
       }
     }
   });
   const wr = total > 0 ? Math.round(sweWins / total * 100) : 0;
-  return { total, sweWins, sweLosses: sweL osses, wr: wr + '%' };
+  return { total, sweWins, sweLosses, wr: wr + '%' };
 }
 
 function onSearch(q) {
