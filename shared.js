@@ -6,7 +6,84 @@
  *   swe_live           Live+upcoming matches (30s / 5min TTL)
  *   swe_history        Accumulated past matches (grows forever, never deleted)
  */
-const WORKER_URL = 'https://floral-moon-0400.epicminecraftboy12.workers.dev';
+const WORKER_URL         = 'https://floral-moon-0400.epicminecraftboy12.workers.dev';
+const TURNSTILE_SITE_KEY = '0x4AAAAAAEau1bQWCYwLDKfv';
+const SESSION_TTL_MS     = 30 * 60 * 1000; // must match the Worker's expiry window
+const SESSION_STORE_KEY  = 'swe_session';
+
+// ── SESSION TOKEN (replaces static X-Worker-Secret) ───────────────────────
+// Flow: solve Turnstile once (invisible, no user interaction in normal cases)
+// → exchange the Turnstile token for a short-lived signed session token at
+// the Worker → reuse that session token on every poll until it expires.
+let _sessionToken   = null;
+let _sessionExpiry  = 0;
+let _sessionInFlight = null;
+let _turnstileWidgetId = null;
+let _turnstilePendingResolve = null;
+let _turnstilePendingReject  = null;
+
+(function _loadStoredSession() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_STORE_KEY);
+    if (!raw) return;
+    const { token, expiry } = JSON.parse(raw);
+    if (expiry > Date.now()) { _sessionToken = token; _sessionExpiry = expiry; }
+  } catch(_) {}
+})();
+
+function _storeSession(token, expiry) {
+  _sessionToken  = token;
+  _sessionExpiry = expiry;
+  try { sessionStorage.setItem(SESSION_STORE_KEY, JSON.stringify({ token, expiry })); } catch(_) {}
+}
+
+function _initTurnstileWidget() {
+  if (_turnstileWidgetId !== null) return;
+  _turnstileWidgetId = turnstile.render('#turnstile-container', {
+    sitekey: TURNSTILE_SITE_KEY,
+    execution: 'execute', // don't run automatically, only when we call turnstile.execute()
+    callback: (token) => { if (_turnstilePendingResolve) _turnstilePendingResolve(token); },
+    'error-callback': () => { if (_turnstilePendingReject) _turnstilePendingReject(new Error('Turnstile verification failed')); },
+    'timeout-callback': () => { if (_turnstilePendingReject) _turnstilePendingReject(new Error('Turnstile timed out')); },
+  });
+}
+
+function _getTurnstileToken() {
+  return new Promise((resolve, reject) => {
+    if (typeof turnstile === 'undefined') { reject(new Error('Turnstile script not loaded')); return; }
+    _initTurnstileWidget();
+    _turnstilePendingResolve = resolve;
+    _turnstilePendingReject  = reject;
+    turnstile.reset(_turnstileWidgetId);
+    turnstile.execute(_turnstileWidgetId);
+  });
+}
+
+async function _exchangeSession() {
+  const turnstileToken = await _getTurnstileToken();
+  const res = await fetch(WORKER_URL + '/session', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ token: turnstileToken }),
+  });
+  if (!res.ok) throw Object.assign(new Error('Session exchange failed'), { status: res.status });
+  const { session, expiresAt } = await res.json();
+  _storeSession(session, expiresAt);
+  return session;
+}
+
+// Returns a valid session token, refreshing it (via Turnstile) only when
+// the cached one is missing or close to expiry. Concurrent callers share
+// the same in-flight exchange instead of triggering duplicate challenges.
+async function getSessionToken(forceRefresh = false) {
+  if (!forceRefresh && _sessionToken && _sessionExpiry - Date.now() > 60 * 1000) {
+    return _sessionToken;
+  }
+  if (!_sessionInFlight) {
+    _sessionInFlight = _exchangeSession().finally(() => { _sessionInFlight = null; });
+  }
+  return _sessionInFlight;
+}
 
 // ── LOCAL STORAGE CACHE ───────────────────────────────────────────────────
 function cacheSet(key, data) {
@@ -24,20 +101,29 @@ function cacheGet(key, maxAgeMs) {
 
 // ── PANDASCORE REST ───────────────────────────────────────────────────────
 async function pandaFetch(path) {
-  const res = await fetch(WORKER_URL + path, {
-    headers: { 'X-Worker-Secret': WORKER_SECRET },
-  });
+  const session = await getSessionToken();
+  let res = await fetch(WORKER_URL + path, { headers: { 'X-Session-Token': session } });
+  if (res.status === 401) {
+    const fresh = await getSessionToken(true);
+    res = await fetch(WORKER_URL + path, { headers: { 'X-Session-Token': fresh } });
+  }
   if (!res.ok) throw Object.assign(new Error('PandaScore error'), { status: res.status });
   return res.json();
 }
 
 // ── GRID GRAPHQL ──────────────────────────────────────────────────────────
 async function gridFetch(endpoint, query, variables = {}) {
-  const res = await fetch(WORKER_URL + endpoint, {
+  const session = await getSessionToken();
+  const doFetch = (token) => fetch(WORKER_URL + endpoint, {
     method:  'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
+    headers: { 'Content-Type': 'application/json', 'X-Session-Token': token },
     body:    JSON.stringify({ query, variables }),
   });
+  let res = await doFetch(session);
+  if (res.status === 401) {
+    const fresh = await getSessionToken(true);
+    res = await doFetch(fresh);
+  }
   if (!res.ok) throw Object.assign(new Error('GRID error'), { status: res.status });
   const json = await res.json();
   if (json.errors?.length) console.warn('[GRID] errors:', json.errors.map(e => e.message).join(', '));
