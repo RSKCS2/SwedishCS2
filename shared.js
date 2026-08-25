@@ -258,6 +258,25 @@ function buildTeamProfiles(matches) {
   return profiles;
 }
 
+// Ranks team profiles by real recent form: 3-month win differential first,
+// then total 3-month wins, then squad completeness, then name. Used by
+// both teams.html and players.html so a player's rank always matches
+// their team's rank on the Teams page.
+function rankTeamProfiles(profiles) {
+  const list = Object.values(profiles);
+  list.sort((a, b) => {
+    const diffA = a.wins3m - a.losses3m, diffB = b.wins3m - b.losses3m;
+    if (diffB !== diffA) return diffB - diffA;
+    if (b.wins3m !== a.wins3m) return b.wins3m - a.wins3m;
+    const infoA = sweInfo({ id: a.id }), infoB = sweInfo({ id: b.id });
+    const fullA = infoA?.isFull ? 1 : 0, fullB = infoB?.isFull ? 1 : 0;
+    if (fullB !== fullA) return fullB - fullA;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+  list.forEach((p, i) => { p.rank = i + 1; });
+  return list;
+}
+
 // ── GRID QUERIES ──────────────────────────────────────────────────────────
 const QUERY_CS2_SERIES = `
   query CS2Series($gte: String!, $lte: String!) {
