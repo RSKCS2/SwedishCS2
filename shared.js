@@ -706,11 +706,22 @@ function computeSwedishValveRanks(teams, valveGlobal) {
 // Builds a readable "tournament / stage" label from a PandaScore match
 // object, e.g. "ESL Pro League Season 21 · Semifinal" instead of a bare
 // tournament name. Falls back gracefully as fields are missing.
+// PandaScore's match.name is often just an auto-generated "Team A vs Team
+// B" label, which is redundant once the card already shows both teams as
+// logos/names — this filters those out so only a real stage name (e.g.
+// "Semifinal", "Grand Final") comes through as the stage.
+function _looksLikeMatchupLabel(name, match) {
+  if (/\bvs\.?\b/i.test(name)) return true;
+  const t1 = match.opponents?.[0]?.opponent?.name;
+  const t2 = match.opponents?.[1]?.opponent?.name;
+  return (t1 && name.includes(t1)) || (t2 && name.includes(t2));
+}
+
 function matchContext(match) {
   const league = match.league?.name || null;
   const serie  = match.serie?.full_name || match.serie?.name || null;
   const tourn  = match.tournament?.name || null;
-  const stage  = (match.name && match.name !== tourn) ? match.name : null;
+  const stage  = (match.name && match.name !== tourn && !_looksLikeMatchupLabel(match.name, match)) ? match.name : null;
 
   const parts = [];
   if (league) parts.push(league);

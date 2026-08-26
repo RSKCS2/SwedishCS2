@@ -31,11 +31,11 @@
       <div class="relative">
         <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
         <input id="player-search" type="text" autocomplete="off"
-          class="bg-surface-container-high border-outline-variant/30 text-on-surface text-sm rounded-full pl-9 pr-4 py-1.5 focus:ring-swedish-gold focus:border-swedish-gold w-48"
+          class="bg-deep-navy border border-outline-variant/30 text-on-surface text-sm rounded-full pl-9 pr-4 py-1.5 focus:ring-swedish-gold focus:border-swedish-gold w-48"
           placeholder="Search players…" oninput="onPlayerSearch(this.value)" />
       </div>
       <button type="button" onclick="sharePage('SweCS2 · Players')" aria-label="Share this page"
-        class="w-9 h-9 flex items-center justify-center rounded-full bg-surface-container-high border border-outline-variant/30 text-on-surface-variant hover:text-swedish-gold hover:border-swedish-gold transition-colors shrink-0">
+        class="w-9 h-9 flex items-center justify-center rounded-full bg-deep-navy border border-outline-variant/30 text-on-surface-variant hover:text-swedish-gold hover:border-swedish-gold transition-colors shrink-0">
         <span class="material-symbols-outlined text-lg">share</span>
       </button>
     </div>
@@ -108,21 +108,21 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('team-filter').innerHTML =
       '<option value="">All Teams</option>' + teamOptions.map(([id, name]) => `<option value="${id}">${name}</option>`).join('');
 
-    renderPlayers();
-
-    // Team rank badges and country flags load in behind the initial
-    // render — neither is needed to show the roster itself.
+    // Wait for ranks and country flags before the first paint. Rendering
+    // once everything is known means a card's rank number and flag never
+    // change after they appear — no jump from unranked to #4, no flag
+    // popping in a beat late.
     try {
       historyMatches = await ensureMatchHistory();
       recomputeRanks();
-      renderPlayers();
     } catch(e) { console.warn('[SWE] Could not compute player team ranks:', e); }
 
     try {
       const teamIds = [...new Set(allPlayers.filter(p => p.current_team).map(p => p.current_team.id))];
       await ensureTeamCountries(teamIds);
-      renderPlayers();
     } catch(e) { console.warn('[SWE] Could not load team countries:', e); }
+
+    renderPlayers();
   } catch(err) {
     console.error('[SWE CS2] Players fetch error:', err);
     document.getElementById('content').innerHTML = `
@@ -158,7 +158,7 @@ function recomputeRanks() {
   const profiles = buildTeamProfiles(historyMatches, periodMonths);
   const ranked = rankTeamProfiles(profiles);
   teamRankMap = {};
-  ranked.forEach(p => { teamRankMap[p.id] = p.rank; });
+  ranked.forEach(p => { teamRankMap[String(p.id)] = p.rank; });
 }
 
 function renderPlayers() {
@@ -170,8 +170,8 @@ function renderPlayers() {
   // whose team has no rank yet (still loading, or no match history) sort
   // to the end, alphabetically among themselves so the order stays stable.
   players.sort((a, b) => {
-    const ra = a.current_team ? teamRankMap[a.current_team.id] : null;
-    const rb = b.current_team ? teamRankMap[b.current_team.id] : null;
+    const ra = a.current_team ? teamRankMap[String(a.current_team.id)] : null;
+    const rb = b.current_team ? teamRankMap[String(b.current_team.id)] : null;
     if (ra && rb) return ra - rb;
     if (ra) return -1;
     if (rb) return 1;
@@ -192,39 +192,37 @@ function renderPlayers() {
 }
 
 function renderPlayerCard(p) {
-  const rank = p.current_team ? teamRankMap[p.current_team.id] : null;
+  const rank = p.current_team ? teamRankMap[String(p.current_team.id)] : null;
   const teamSwe = p.current_team ? sweInfo(p.current_team) : null;
   const teamFlagLine = p.current_team
     ? (teamSwe?.isMajority ? '🇸🇪' : (teamCountryInfo(p.current_team.id) ? teamCountryLine(p.current_team.id).split(' ')[0] : ''))
     : '';
   // Player-level stats aren't wired up to a data source yet — show 0s
   // rather than hiding the row, so the layout doesn't jump once they are.
-  const rating = p.rating ?? 0;
-  const kd     = p.kd_ratio ?? 0;
-  const maps   = p.maps_played ?? 0;
+  const kd   = p.kd_ratio ?? 0;
+  const adr  = p.adr ?? 0;
+  const maps = p.maps_played ?? 0;
 
   return `
   <div class="bg-deep-navy rounded-xl border border-outline-variant/30 hover:border-outline-variant/60 transition-colors overflow-hidden flex flex-col relative">
     ${rank ? `<div class="absolute top-2 left-2 z-10 w-8 h-8 rounded-lg bg-swedish-gold text-deep-navy font-black flex items-center justify-center text-xs">#${rank}</div>` : ''}
-    <div class="h-24 bg-surface-container-high relative flex items-center px-4">
-      <div class="flex items-center gap-3 min-w-0">
-        ${teamLogo({ image_url: p.image_url, name: p.name }, 'w-14 h-14 rounded-full border border-outline-variant/50 object-cover bg-deep-navy shrink-0')}
-        <div class="min-w-0">
-          <h3 class="font-body-md text-body-md text-on-surface font-bold m-0 truncate">${p.name || '?'}</h3>
-          <p class="font-metadata text-metadata text-on-surface-variant truncate flex items-center gap-1">${teamFlagLine ? `<span class="shrink-0">${teamFlagLine}</span>` : ''}<span class="truncate">${p.current_team?.name || 'Free agent'}</span></p>
-        </div>
+    <div class="h-36 bg-surface-container-high relative overflow-hidden">
+      ${teamLogo({ image_url: p.image_url, name: p.name }, 'w-full h-full object-cover object-top')}
+      <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-deep-navy/90 to-transparent px-4 pt-8 pb-2">
+        <h3 class="font-body-md text-body-md text-on-surface font-bold m-0 truncate">${p.name || '?'}</h3>
+        <p class="font-metadata text-metadata text-on-surface-variant truncate flex items-center gap-1">${teamFlagLine ? `<span class="shrink-0">${teamFlagLine}</span>` : ''}<span class="truncate">${p.current_team?.name || 'Free agent'}</span></p>
       </div>
     </div>
     <div class="p-4 flex flex-col gap-3 flex-1">
       ${p.role ? `<span class="font-label-caps text-label-caps bg-surface-container-highest text-on-surface-variant px-2 py-1 rounded self-start">${p.role}</span>` : ''}
       <div class="grid grid-cols-3 gap-2 text-center border-t border-outline-variant/10 pt-3">
         <div>
-          <div class="font-bold text-sm text-on-surface">${rating}</div>
-          <div class="font-label-caps text-label-caps text-on-surface-variant">Rating</div>
-        </div>
-        <div>
           <div class="font-bold text-sm text-on-surface">${kd}</div>
           <div class="font-label-caps text-label-caps text-on-surface-variant">K/D</div>
+        </div>
+        <div>
+          <div class="font-bold text-sm text-on-surface">${adr}</div>
+          <div class="font-label-caps text-label-caps text-on-surface-variant">ADR</div>
         </div>
         <div>
           <div class="font-bold text-sm text-on-surface">${maps}</div>
