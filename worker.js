@@ -122,13 +122,35 @@ async function fetchPandascoreWithPagination(url, token, maxPages = 999) {
   return results;
 }
 
-// ── SINGLE TEAM ROSTER (with KV cache + durable stale fallback) ─────────
+// ── SINGLE TEAM ROSTER (with KV cache + durable stale fallback + GRID) ──
 // `team_roster_{id}`       → fresh copy, expires after TEAM_ROSTER_CACHE_TTL_S
 // `team_roster_stale_{id}` → same payload, never expires, only overwritten
 //                            on a new successful fetch. Used as a fallback
 //                            when PandaScore is down and the fresh key has
 //                            already expired.
+// If neither cache has anything, falls back to a GRID-derived roster
+// (see fetchGridTeamRosterByName) before finally giving up.
 const TEAM_ROSTER_CACHE_TTL_S = 24 * 60 * 60;
+const GRID_ROSTER_CACHE_TTL_S = 6 * 60 * 60; // shorter TTL: less authoritative than Panda
+
+async function tryGridRosterFallback(teamId, env) {
+  if (!env.GRID_TOKEN) return null;
+  const teamName = await resolveTeamNameFromId(teamId, env);
+  if (!teamName) {
+    console.warn(`[GRID] No cached team name for team ${teamId}, cannot query GRID by name`);
+    return null;
+  }
+  const roster = await fetchGridTeamRosterByName(teamName, env.GRID_TOKEN);
+  if (!roster) {
+    console.warn(`[GRID] No roster found for "${teamName}" (team ${teamId}) in the last ${GRID_ROSTER_LOOKBACK_DAYS} days`);
+    return null;
+  }
+  console.log(`[GRID] Roster fallback served for "${teamName}" (team ${teamId}): ${roster.players.length} players`);
+  await env.MATCH_DATA.put(`team_roster_${teamId}`, JSON.stringify(roster), { expirationTtl: GRID_ROSTER_CACHE_TTL_S });
+  await env.MATCH_DATA.put(`team_roster_stale_${teamId}`, JSON.stringify(roster));
+  return roster;
+}
+
 async function fetchTeamRoster(teamId, token, env) {
   const kvKey = `team_roster_${teamId}`;
   const staleKey = `team_roster_stale_${teamId}`;
@@ -146,6 +168,8 @@ async function fetchTeamRoster(teamId, token, env) {
     console.error(`[PANDA] GET /csgo/teams/${teamId} network error: ${err.message}`);
     const stale = await env.MATCH_DATA.get(staleKey);
     if (stale) return JSON.parse(stale);
+    const grid = await tryGridRosterFallback(teamId, env);
+    if (grid) return grid;
     throw new Error(`PandaScore team ${teamId} unreachable and no stale copy exists`);
   }
 
@@ -158,6 +182,8 @@ async function fetchTeamRoster(teamId, token, env) {
       console.log(`[PANDA] Serving stale roster for team ${teamId} (HTTP ${res.status} from PandaScore)`);
       return JSON.parse(stale);
     }
+    const grid = await tryGridRosterFallback(teamId, env);
+    if (grid) return grid;
     throw new Error(`PandaScore team ${teamId} failed: HTTP ${res.status} ${body.slice(0, 300)}`);
   }
 
@@ -167,6 +193,8 @@ async function fetchTeamRoster(teamId, token, env) {
   } catch (_) {
     const stale = await env.MATCH_DATA.get(staleKey);
     if (stale) return JSON.parse(stale);
+    const grid = await tryGridRosterFallback(teamId, env);
+    if (grid) return grid;
     throw new Error(`PandaScore team ${teamId} returned invalid JSON`);
   }
 
@@ -287,6 +315,32 @@ async function queryGridLive(seriesId, token) {
     return await res.json();
   } catch (err) {
     console.error(`GRID live fetch error: ${err.message}`);
+    return null;
+  }
+}
+
+// Same request shape fetchGridPlayerRows already uses successfully for
+// per-game stats. Reused here to build a team roster from player names
+// that showed up in recent series, since GRID has no documented direct
+// "roster by team ID" query and does not share PandaScore's team IDs.
+async function queryGridSeriesPlayers(seriesId, token) {
+  try {
+    const res = await fetch(GRID_LIVE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': token },
+      body: JSON.stringify({ query: QUERY_SERIES_STATE_PLAYERS, variables: { id: seriesId } }),
+    });
+    if (!res.ok) {
+      console.error(`GRID series players query failed: ${res.status}`);
+      return null;
+    }
+    const json = await res.json();
+    if (json.errors?.length) {
+      console.error(`GRID series players query errors: ${json.errors.map(e => e.message).join(', ')}`);
+    }
+    return json?.data?.seriesState || null;
+  } catch (err) {
+    console.error(`GRID series players fetch error: ${err.message}`);
     return null;
   }
 }
@@ -439,6 +493,77 @@ function isSwedishTeam(match, swedishTeamIds) {
   const team2Id = match.opponents[1]?.opponent?.id;
   return swedishTeamIds.includes(team1Id) || swedishTeamIds.includes(team2Id);
 }
+
+// ── GRID TEAM ROSTER FALLBACK (name-based) ────────────────────────────────
+// GRID doesn't share PandaScore's numeric team IDs, and its Central Data
+// schema has no documented "roster by team ID" query in what's available
+// to us, so a team ID alone can't be resolved on the GRID side directly.
+// What DOES work, because fetchGridPlayerRows already proves it in
+// production, is querying player names out of recent series states for a
+// team NAME match. This builds a roster the same way: pull the team's
+// recent series from Central Data, pull player names per game from
+// Series State, and de-duplicate by name.
+//
+// Caveat: GRID's series-state player data has no nationality field, so a
+// GRID-sourced roster will always classify as 'international' in
+// classifyTeamCountry(). That badge only works correctly against a
+// PandaScore-sourced roster. Everything else that reads team_roster_{id}
+// (player names for stat matching, headshot counts, etc.) works fine
+// against a GRID-sourced roster.
+const GRID_ROSTER_LOOKBACK_DAYS = 90;
+const GRID_ROSTER_MAX_SERIES = 5;
+
+async function resolveTeamNameFromId(teamId, env) {
+  try {
+    const liveJson = await env.MATCH_DATA.get(KV_LIVE_DATA);
+    if (!liveJson) return null;
+    const live = JSON.parse(liveJson);
+    const match = (live.players || []).find(p => String(p.current_team?.id) === String(teamId));
+    return match?.current_team?.name || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function fetchGridTeamRosterByName(teamName, gridToken) {
+  const gte = new Date(Date.now() - GRID_ROSTER_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const lte = new Date().toISOString();
+
+  const central = await queryGridCentral({ gte, lte }, gridToken);
+  const seriesList = central?.data?.allSeries?.edges?.map(e => e.node) || [];
+  const target = normName(teamName);
+  if (!target) return null;
+
+  const matchingSeries = seriesList
+    .filter(s => (s.teams || []).some(t => normName(t.baseInfo?.name) === target))
+    .sort((a, b) => new Date(b.startTimeScheduled) - new Date(a.startTimeScheduled))
+    .slice(0, GRID_ROSTER_MAX_SERIES);
+
+  if (!matchingSeries.length) return null;
+
+  const seenNames = new Set();
+  const players = [];
+
+  for (const series of matchingSeries) {
+    const state = await queryGridSeriesPlayers(series.id, gridToken);
+    for (const game of (state?.games || [])) {
+      for (const t of (game.teams || [])) {
+        if (normName(t.name) !== target) continue;
+        for (const p of (t.players || [])) {
+          const key = normPlayerName(p.name);
+          if (!key || seenNames.has(key)) continue;
+          seenNames.add(key);
+          players.push({ id: null, name: p.name, nationality: null, source: 'grid' });
+        }
+      }
+    }
+    // A single finished series is usually a full 5-man roster already.
+    if (players.length >= 5) break;
+  }
+
+  return players.length ? { players, source: 'grid', fetched_at: new Date().toISOString() } : null;
+}
+
 
 async function attachGridStateToRunningMatches(runningMatches, swedishTeamIds, gridToken) {
   for (const match of runningMatches) {
