@@ -11,8 +11,8 @@
 <script src="tailwind-config.js"></script>
 <link rel="stylesheet" href="theme.css" />
 
-<!-- CSP override to allow Turnstile and inline scripts (relaxed for demo) -->
-<meta http-equiv="Content-Security-Policy" content="default-src *; script-src * 'unsafe-inline' 'unsafe-eval'; connect-src *; img-src *; style-src * 'unsafe-inline';">
+<!-- CSP relaxed: allow Turnstile and data: images -->
+<meta http-equiv="Content-Security-Policy" content="default-src *; script-src * 'unsafe-inline' 'unsafe-eval'; connect-src *; img-src * data:; style-src * 'unsafe-inline';">
 </head>
 <body class="bg-surface-blue text-on-surface font-body-md min-h-screen flex flex-col antialiased selection:bg-secondary-container selection:text-on-secondary-container">
 
@@ -118,7 +118,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       recomputeRanks();
     } catch(e) {
       console.warn('[SWE] Could not compute player team ranks:', e);
-      // keep rankMap empty
     }
 
     try {
@@ -133,7 +132,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       recomputeStats();
     } catch(e) {
       console.warn('[SWE] Could not load player stats:', e);
-      // statMap stays empty -> cards show '—'
     }
 
     renderPlayers();

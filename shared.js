@@ -109,13 +109,24 @@ function cacheGet(key, maxAgeMs) {
   } catch(_) { return null; }
 }
 
+// ── GLOBAL FLAG: stop retrying if PandaScore is unreachable ──────────────
+let _pandaScoreUnavailable = false;
+
 // ── PANDASCORE REST ───────────────────────────────────────────────────────
 async function pandaFetch(path) {
+  if (_pandaScoreUnavailable) {
+    throw new Error('PandaScore unavailable (previous auth failure)');
+  }
   const session = await getSessionToken();
   let res = await fetch(WORKER_URL + path, { headers: { 'X-Session-Token': session } });
   if (res.status === 401) {
     const fresh = await getSessionToken(true);
     res = await fetch(WORKER_URL + path, { headers: { 'X-Session-Token': fresh } });
+  }
+  // Treat 401/403 as permanent auth failures for this session
+  if (res.status === 401 || res.status === 403) {
+    _pandaScoreUnavailable = true;
+    throw new Error('PandaScore authentication failed – check Worker secrets');
   }
   if (!res.ok) throw Object.assign(new Error('PandaScore error'), { status: res.status });
   return res.json();
@@ -123,6 +134,9 @@ async function pandaFetch(path) {
 
 // ── GRID GRAPHQL ──────────────────────────────────────────────────────────
 async function gridFetch(endpoint, query, variables = {}) {
+  if (_pandaScoreUnavailable) {
+    throw new Error('PandaScore unavailable – skipping GRID');
+  }
   const session = await getSessionToken();
   const doFetch = (token) => fetch(WORKER_URL + endpoint, {
     method:  'POST',
@@ -170,7 +184,10 @@ async function ensureSwedishData() {
     }
     Object.values(_sweTeamData).forEach(d => { d.isFull = d.count >= 5; d.isMajority = d.count >= 3; });
     cacheSet('swe_players_v2', { teams: _sweTeamData, players: _swePlayers });
-  } catch(e) { console.warn('[SWE] Failed to load Swedish player data:', e); }
+  } catch(e) {
+    console.warn('[SWE] Failed to load Swedish player data:', e);
+    // If this fails, we still have an empty list; the UI will show an error.
+  }
   _sweLoaded = true;
 }
 
@@ -238,6 +255,10 @@ function classifyTeamCountry(players) {
 }
 
 async function ensureTeamCountries(teamIds) {
+  if (_pandaScoreUnavailable) {
+    console.warn('[SWE] Skipping team country fetches – PandaScore unavailable');
+    return _getTeamCountryCache();
+  }
   const cache = _getTeamCountryCache();
   const missing = [...new Set(teamIds)]
     .filter(id => id && !(id in cache) && !_teamCountryFailures.has(id));
@@ -255,7 +276,10 @@ async function ensureTeamCountries(teamIds) {
         dirty = true;
       } catch(e) {
         _teamCountryFailures.add(id);
-        console.warn('[SWE] Could not fetch roster for team', id, e);
+        // Only log if not an auth failure (already logged globally)
+        if (!_pandaScoreUnavailable) {
+          console.warn('[SWE] Could not fetch roster for team', id, e);
+        }
       }
     }));
   }
@@ -277,6 +301,10 @@ function teamCountryLine(teamId) {
 
 // ── TEAM MATCH HISTORY ──────────────────────────────────────────────────────
 async function ensureMatchHistory() {
+  if (_pandaScoreUnavailable) {
+    console.warn('[SWE] Skipping match history fetch – PandaScore unavailable');
+    return [];
+  }
   const CACHE_VERSION     = 'v3';
   const HISTORY_KEY       = 'swe_history_' + CACHE_VERSION;
   const HISTORY_FETCH_KEY = 'swe_history_fetched_' + CACHE_VERSION;
@@ -299,7 +327,9 @@ async function ensureMatchHistory() {
       });
       cacheSet(HISTORY_KEY, matches);
       localStorage.setItem(HISTORY_FETCH_KEY, Date.now().toString());
-    } catch(e) { console.warn('[SWE] Failed to load match history:', e); }
+    } catch(e) {
+      console.warn('[SWE] Failed to load match history:', e);
+    }
   }
   return matches;
 }
@@ -349,6 +379,10 @@ function rankTeamProfiles(profiles) {
 
 // ── PLAYER GAME STATS ──────────────────────────────────────────────────────
 async function ensurePlayerGameStats() {
+  if (_pandaScoreUnavailable) {
+    console.warn('[SWE] Skipping player stats fetch – PandaScore unavailable');
+    return [];
+  }
   const CACHE_VERSION  = 'v1';
   const STATS_KEY       = 'swe_player_stats_' + CACHE_VERSION;
   const STATS_FETCH_KEY = 'swe_player_stats_fetched_' + CACHE_VERSION;
@@ -374,7 +408,9 @@ async function ensurePlayerGameStats() {
         cacheSet(STATS_KEY, rows);
       }
       localStorage.setItem(STATS_FETCH_KEY, Date.now().toString());
-    } catch(e) { console.warn('[SWE] Failed to load player stats:', e); }
+    } catch(e) {
+      console.warn('[SWE] Failed to load player stats:', e);
+    }
   }
   return rows;
 }
