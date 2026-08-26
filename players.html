@@ -56,8 +56,8 @@
         </select>
         <select id="period-filter" onchange="onPeriodFilter(this.value)"
           class="bg-surface-container-high border-none text-on-surface text-sm rounded-md py-1.5 pl-3 pr-8 focus:ring-1 focus:ring-swedish-gold">
-          <option value="1">This Month</option>
-          <option value="3" selected>3 Months</option>
+          <option value="1" selected>This Month</option>
+          <option value="3">3 Months</option>
           <option value="6">6 Months</option>
           <option value="9">9 Months</option>
           <option value="12">This Year</option>
@@ -94,14 +94,14 @@
 let allPlayers = [];
 let playerQuery = '';
 let teamFilterId = '';
-let periodMonths = 3;
+let periodMonths = 1;
 let teamRankMap = {};
 let historyMatches = [];
 
 window.addEventListener('DOMContentLoaded', async () => {
   try {
     await ensureSwedishData();
-    allPlayers = getSwedishPlayers().slice();
+    allPlayers = getSwedishPlayers().filter(p => (p.role || '').toLowerCase() !== 'coach');
 
     const teamOptions = [...new Map(allPlayers.filter(p => p.current_team).map(p => [p.current_team.id, p.current_team.name])).entries()]
       .sort((a, b) => a[1].localeCompare(b[1]));
@@ -206,8 +206,8 @@ function renderPlayerCard(p) {
   return `
   <div class="bg-deep-navy rounded-xl border border-outline-variant/30 hover:border-outline-variant/60 transition-colors overflow-hidden flex flex-col relative">
     ${rank ? `<div class="absolute top-2 left-2 z-10 w-8 h-8 rounded-lg bg-swedish-gold text-deep-navy font-black flex items-center justify-center text-xs">#${rank}</div>` : ''}
-    <div class="h-36 bg-surface-container-high relative overflow-hidden">
-      ${teamLogo({ image_url: p.image_url, name: p.name }, 'w-full h-full object-cover object-top')}
+    <div class="h-48 bg-surface-container-high relative overflow-hidden">
+      ${teamLogo({ image_url: p.image_url, name: p.name }, 'w-full h-full object-cover object-center')}
       <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-deep-navy/90 to-transparent px-4 pt-8 pb-2">
         <h3 class="font-body-md text-body-md text-on-surface font-bold m-0 truncate">${p.name || '?'}</h3>
         <p class="font-metadata text-metadata text-on-surface-variant truncate flex items-center gap-1">${teamFlagLine ? `<span class="shrink-0">${teamFlagLine}</span>` : ''}<span class="truncate">${p.current_team?.name || 'Free agent'}</span></p>
