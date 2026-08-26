@@ -110,11 +110,20 @@ function cacheGet(key, maxAgeMs) {
 }
 
 // ── GLOBAL FLAG: stop retrying if PandaScore is unreachable ──────────────
+// Scope note: only guard calls that hit a Worker route which itself calls
+// PandaScore live with no fallback (currently just /csgo/teams/{id}, via
+// ensureTeamCountries). Routes that are KV-backed on the Worker side
+// (/csgo/matches/past, /csgo/player-stats) already have GRID blended in
+// server-side by the scheduled job, so they must not be gated by this flag.
 let _pandaScoreUnavailable = false;
 
 // ── PANDASCORE REST ───────────────────────────────────────────────────────
-async function pandaFetch(path) {
-  if (_pandaScoreUnavailable) {
+// bypassGuard: set true for Worker routes that are KV-backed and never call
+// PandaScore live in the request path (/csgo/matches/past, /csgo/player-stats).
+// Those routes always return 200, so calling them while _pandaScoreUnavailable
+// is true is safe and should not be blocked by an unrelated outage.
+async function pandaFetch(path, { bypassGuard = false } = {}) {
+  if (_pandaScoreUnavailable && !bypassGuard) {
     throw new Error('PandaScore unavailable (previous failure)');
   }
   const session = await getSessionToken();
@@ -302,10 +311,9 @@ function teamCountryLine(teamId) {
 
 // ── TEAM MATCH HISTORY ──────────────────────────────────────────────────────
 async function ensureMatchHistory() {
-  if (_pandaScoreUnavailable) {
-    console.warn('[SWE] Skipping match history fetch – PandaScore unavailable');
-    return [];
-  }
+  // Not gated on _pandaScoreUnavailable: the Worker's /csgo/matches/past
+  // route only reads KV_HISTORY_DATA, which the scheduled job populates
+  // from PandaScore or GRID. It does not call PandaScore live per request.
   const CACHE_VERSION     = 'v3';
   const HISTORY_KEY       = 'swe_history_' + CACHE_VERSION;
   const HISTORY_FETCH_KEY = 'swe_history_fetched_' + CACHE_VERSION;
@@ -318,7 +326,7 @@ async function ensureMatchHistory() {
   const isStale   = Date.now() - lastFetch > HISTORY_STALE_MS;
   if (isStale || !matches.length) {
     try {
-      const pastList = await pandaFetch('/csgo/matches/past?per_page=100&include=opponents,results,games,winner');
+      const pastList = await pandaFetch('/csgo/matches/past?per_page=100&include=opponents,results,games,winner', { bypassGuard: true });
       const fetched  = pastList.filter(m => m.opponents?.length === 2 && (sweInfo(m.opponents[0]?.opponent) || sweInfo(m.opponents[1]?.opponent)));
       const seen = new Set();
       matches = [...fetched, ...matches].filter(m => {
@@ -380,10 +388,10 @@ function rankTeamProfiles(profiles) {
 
 // ── PLAYER GAME STATS ──────────────────────────────────────────────────────
 async function ensurePlayerGameStats() {
-  if (_pandaScoreUnavailable) {
-    console.warn('[SWE] Skipping player stats fetch – PandaScore unavailable');
-    return [];
-  }
+  // Not gated on _pandaScoreUnavailable: the Worker's /csgo/player-stats
+  // route only reads KV_PLAYER_STATS, which processStatsQueue() populates
+  // by trying PandaScore then GRID per game. It does not call PandaScore
+  // live per request, so a PandaScore outage elsewhere must not skip this.
   const CACHE_VERSION  = 'v1';
   const STATS_KEY       = 'swe_player_stats_' + CACHE_VERSION;
   const STATS_FETCH_KEY = 'swe_player_stats_fetched_' + CACHE_VERSION;
@@ -398,7 +406,7 @@ async function ensurePlayerGameStats() {
       const fetched = [];
       let page = 1;
       while (true) {
-        const batch = await pandaFetch(`/csgo/player-stats?per_page=100&page=${page}`);
+        const batch = await pandaFetch(`/csgo/player-stats?per_page=100&page=${page}`, { bypassGuard: true });
         if (!batch.length) break;
         fetched.push(...batch);
         if (batch.length < 100) break;

@@ -122,18 +122,56 @@ async function fetchPandascoreWithPagination(url, token, maxPages = 999) {
   return results;
 }
 
-// ── SINGLE TEAM ROSTER (with KV cache) ──────────────────────────────────
+// ── SINGLE TEAM ROSTER (with KV cache + durable stale fallback) ─────────
+// `team_roster_{id}`       → fresh copy, expires after TEAM_ROSTER_CACHE_TTL_S
+// `team_roster_stale_{id}` → same payload, never expires, only overwritten
+//                            on a new successful fetch. Used as a fallback
+//                            when PandaScore is down and the fresh key has
+//                            already expired.
 const TEAM_ROSTER_CACHE_TTL_S = 24 * 60 * 60;
 async function fetchTeamRoster(teamId, token, env) {
   const kvKey = `team_roster_${teamId}`;
+  const staleKey = `team_roster_stale_${teamId}`;
+
   const cached = await env.MATCH_DATA.get(kvKey);
   if (cached) return JSON.parse(cached);
-  const res = await fetch(`${PANDA_BASE}/csgo/teams/${teamId}`, {
-    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
-  });
-  if (!res.ok) throw new Error(`PandaScore team fetch failed: ${res.status}`);
-  const data = await res.json();
+
+  let res, body;
+  try {
+    res = await fetch(`${PANDA_BASE}/csgo/teams/${teamId}`, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+    });
+    body = await res.text();
+  } catch (err) {
+    console.error(`[PANDA] GET /csgo/teams/${teamId} network error: ${err.message}`);
+    const stale = await env.MATCH_DATA.get(staleKey);
+    if (stale) return JSON.parse(stale);
+    throw new Error(`PandaScore team ${teamId} unreachable and no stale copy exists`);
+  }
+
+  console.log(`[PANDA] GET /csgo/teams/${teamId} -> HTTP ${res.status}`);
+
+  if (!res.ok) {
+    console.error(`[PANDA] Response: ${body.slice(0, 500)}`);
+    const stale = await env.MATCH_DATA.get(staleKey);
+    if (stale) {
+      console.log(`[PANDA] Serving stale roster for team ${teamId} (HTTP ${res.status} from PandaScore)`);
+      return JSON.parse(stale);
+    }
+    throw new Error(`PandaScore team ${teamId} failed: HTTP ${res.status} ${body.slice(0, 300)}`);
+  }
+
+  let data;
+  try {
+    data = JSON.parse(body);
+  } catch (_) {
+    const stale = await env.MATCH_DATA.get(staleKey);
+    if (stale) return JSON.parse(stale);
+    throw new Error(`PandaScore team ${teamId} returned invalid JSON`);
+  }
+
   await env.MATCH_DATA.put(kvKey, JSON.stringify(data), { expirationTtl: TEAM_ROSTER_CACHE_TTL_S });
+  await env.MATCH_DATA.put(staleKey, JSON.stringify(data));
   return data;
 }
 
@@ -875,15 +913,11 @@ async function handleFetch(request, env) {
           headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
         });
       } catch (err) {
-        console.error(`Team roster fetch error: ${err.message}`);
-        const cached = await env.MATCH_DATA.get(`team_roster_${teamId}`);
-        if (cached) {
-          return new Response(cached, {
-            status: 200,
-            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
-          });
-        }
-        return new Response(JSON.stringify({ error: 'Could not fetch team roster and no cached roster exists' }), {
+        console.error(`Team roster fetch error for team ${teamId}: ${err.message}`);
+        // fetchTeamRoster already checked both the fresh and durable stale
+        // KV copies before throwing, so reaching this point means neither
+        // exists yet for this team. Nothing left to serve.
+        return new Response(JSON.stringify({ error: 'Could not fetch team roster and no cached roster exists', detail: err.message }), {
           status: 503, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
         });
       }
