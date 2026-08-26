@@ -129,15 +129,20 @@ async function fetchPandascoreWithPagination(url, token, maxPages = 999) {
 //                            when PandaScore is down and the fresh key has
 //                            already expired.
 // If neither cache has anything, falls back to a GRID-derived roster
-// (see fetchGridTeamRosterByName) before finally giving up.
+// (see fetchGridTeamRosterByName) before finally giving up. GRID has no
+// PandaScore-compatible team ID, so it needs to search by name. The caller
+// can pass a `nameHint` (the client already has current_team.name on hand);
+// if omitted, resolveTeamNameFromId() is tried as a last resort, but that
+// depends on KV_LIVE_DATA already containing this team, which will not be
+// true during a PandaScore outage that also blocked the scheduled job.
 const TEAM_ROSTER_CACHE_TTL_S = 24 * 60 * 60;
 const GRID_ROSTER_CACHE_TTL_S = 6 * 60 * 60; // shorter TTL: less authoritative than Panda
 
-async function tryGridRosterFallback(teamId, env) {
+async function tryGridRosterFallback(teamId, env, nameHint = null) {
   if (!env.GRID_TOKEN) return null;
-  const teamName = await resolveTeamNameFromId(teamId, env);
+  const teamName = nameHint || await resolveTeamNameFromId(teamId, env);
   if (!teamName) {
-    console.warn(`[GRID] No cached team name for team ${teamId}, cannot query GRID by name`);
+    console.warn(`[GRID] No team name available for team ${teamId} (no hint, none cached), cannot query GRID by name`);
     return null;
   }
   const roster = await fetchGridTeamRosterByName(teamName, env.GRID_TOKEN);
@@ -151,7 +156,7 @@ async function tryGridRosterFallback(teamId, env) {
   return roster;
 }
 
-async function fetchTeamRoster(teamId, token, env) {
+async function fetchTeamRoster(teamId, token, env, nameHint = null) {
   const kvKey = `team_roster_${teamId}`;
   const staleKey = `team_roster_stale_${teamId}`;
 
@@ -168,7 +173,7 @@ async function fetchTeamRoster(teamId, token, env) {
     console.error(`[PANDA] GET /csgo/teams/${teamId} network error: ${err.message}`);
     const stale = await env.MATCH_DATA.get(staleKey);
     if (stale) return JSON.parse(stale);
-    const grid = await tryGridRosterFallback(teamId, env);
+    const grid = await tryGridRosterFallback(teamId, env, nameHint);
     if (grid) return grid;
     throw new Error(`PandaScore team ${teamId} unreachable and no stale copy exists`);
   }
@@ -182,7 +187,7 @@ async function fetchTeamRoster(teamId, token, env) {
       console.log(`[PANDA] Serving stale roster for team ${teamId} (HTTP ${res.status} from PandaScore)`);
       return JSON.parse(stale);
     }
-    const grid = await tryGridRosterFallback(teamId, env);
+    const grid = await tryGridRosterFallback(teamId, env, nameHint);
     if (grid) return grid;
     throw new Error(`PandaScore team ${teamId} failed: HTTP ${res.status} ${body.slice(0, 300)}`);
   }
@@ -193,7 +198,7 @@ async function fetchTeamRoster(teamId, token, env) {
   } catch (_) {
     const stale = await env.MATCH_DATA.get(staleKey);
     if (stale) return JSON.parse(stale);
-    const grid = await tryGridRosterFallback(teamId, env);
+    const grid = await tryGridRosterFallback(teamId, env, nameHint);
     if (grid) return grid;
     throw new Error(`PandaScore team ${teamId} returned invalid JSON`);
   }
@@ -1031,8 +1036,9 @@ async function handleFetch(request, env) {
     // /csgo/teams/{id} → fetch from PandaScore (cached in KV)
     if (path.startsWith('/csgo/teams/')) {
       const teamId = path.split('/')[3];
+      const nameHint = url.searchParams.get('name') || null;
       try {
-        const data = await fetchTeamRoster(teamId, env.PANDASCORE_TOKEN, env);
+        const data = await fetchTeamRoster(teamId, env.PANDASCORE_TOKEN, env, nameHint);
         return new Response(JSON.stringify(data), {
           status: 200,
           headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },

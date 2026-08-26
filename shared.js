@@ -275,13 +275,21 @@ async function ensureTeamCountries(teamIds) {
 
   if (!missing.length) return cache;
 
+  // The Worker's GRID fallback has no PandaScore-compatible team ID and has
+  // to search by name. It can reconstruct a name from its own KV_LIVE_DATA,
+  // but that cache can itself be empty for this team during a PandaScore
+  // outage. We already have the name right here, so send it along.
+  const nameById = {};
+  _swePlayers.forEach(p => { if (p.current_team?.id) nameById[p.current_team.id] = p.current_team.name; });
+
   let dirty = false;
   const BATCH_SIZE = 5;
   for (let i = 0; i < missing.length; i += BATCH_SIZE) {
     const batch = missing.slice(i, i + BATCH_SIZE);
     await Promise.all(batch.map(async id => {
       try {
-        const team = await pandaFetch(`/csgo/teams/${id}`);
+        const nameHint = nameById[id] ? `?name=${encodeURIComponent(nameById[id])}` : '';
+        const team = await pandaFetch(`/csgo/teams/${id}${nameHint}`);
         cache[id] = classifyTeamCountry(team?.players);
         dirty = true;
       } catch(e) {
