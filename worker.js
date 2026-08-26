@@ -775,9 +775,11 @@ async function fetchGridPlayerRows(meta, token, env) {
   }
 }
 
+const STATS_MAX_ATTEMPTS = 5; // after this many failed cron ticks, stop retrying and mark the game done
+
 async function processStatsQueue(env) {
   const queue = await getStatsQueue(env);
-  if (!queue.length) return { processed: 0, newRows: 0, remaining: 0 };
+  if (!queue.length) return { processed: 0, newRows: 0, remaining: 0, gaveUp: 0 };
   const batch     = queue.slice(0, STATS_BATCH_SIZE);
   const remaining = queue.slice(STATS_BATCH_SIZE);
   const done = await getStatsDone(env);
@@ -785,6 +787,7 @@ async function processStatsQueue(env) {
   const existingStats = existingJson ? JSON.parse(existingJson) : [];
   const existingKeys = new Set(existingStats.map(r => `${r.game_id}_${r.player_id ?? r.player_name}`));
   let newRowCount = 0;
+  let gaveUpCount = 0;
   for (const meta of batch) {
     let rows = [];
     try {
@@ -802,15 +805,29 @@ async function processStatsQueue(env) {
         newRowCount++;
       }
     });
-    // Only mark the game done when at least one provider returned rows.
-    // Otherwise keep it in the queue so the next cron run can retry.
-    if (rows.length) done.add(meta.gameId);
-    else remaining.push(meta);
+    if (rows.length) {
+      done.add(meta.gameId);
+      continue;
+    }
+    // Neither provider had data this attempt. Retry a bounded number of
+    // times (covers a transient PandaScore/GRID hiccup), then give up for
+    // good. Without this cap, a game with no data on either source (e.g.
+    // a match PandaScore returns 403 for and GRID never covered) requeues
+    // itself forever: same 5 games in, same 5 games out, every cron tick,
+    // hitting both providers for nothing every time.
+    const attempts = (meta.attempts || 0) + 1;
+    if (attempts >= STATS_MAX_ATTEMPTS) {
+      done.add(meta.gameId);
+      gaveUpCount++;
+      console.warn(`Player stats: giving up on game ${meta.gameId} after ${attempts} attempts, no data from PandaScore or GRID`);
+    } else {
+      remaining.push({ ...meta, attempts });
+    }
   }
   await env.MATCH_DATA.put(KV_PLAYER_STATS, JSON.stringify(existingStats));
   await env.MATCH_DATA.put(KV_STATS_DONE, JSON.stringify([...done]));
   await env.MATCH_DATA.put(KV_STATS_QUEUE, JSON.stringify(remaining));
-  return { processed: batch.length, newRows: newRowCount, remaining: remaining.length };
+  return { processed: batch.length, newRows: newRowCount, remaining: remaining.length, gaveUp: gaveUpCount };
 }
 
 // ─── SCHEDULED HANDLER (unchanged) ──────────────────────────────────────
@@ -949,9 +966,9 @@ async function handleScheduled(env) {
       const historyForQueue = historyJson ? JSON.parse(historyJson) : [];
       const added = await enqueueFinishedGames(historyForQueue, env);
       if (added) console.log(`Queued ${added} newly finished games for stats`);
-      const { processed, newRows, remaining } = await processStatsQueue(env);
+      const { processed, newRows, remaining, gaveUp } = await processStatsQueue(env);
       if (processed) {
-        console.log(`Player stats: processed ${processed} games, ${newRows} new rows, ${remaining} left in queue`);
+        console.log(`Player stats: processed ${processed} games, ${newRows} new rows, ${gaveUp} gave up, ${remaining} left in queue`);
       }
     } catch (e) {
       console.error(`Player stats pipeline error: ${e.message}`);
