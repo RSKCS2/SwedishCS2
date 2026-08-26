@@ -409,6 +409,7 @@ function gridSeriesToPandaMatch(series, state = null) {
   }));
 
   const games = (state?.games || []).map(g => ({
+    id: `grid-${series.id}-g${g.sequenceNumber}`,
     sequence_number: g.sequenceNumber,
     status: g.finished ? 'finished' : g.started ? 'running' : 'not_started',
     finished: !!g.finished,
