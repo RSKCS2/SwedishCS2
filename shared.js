@@ -11,7 +11,7 @@ const TURNSTILE_SITE_KEY = '0x4AAAAAAEau1bQWCYwLDKfv';
 const SESSION_TTL_MS     = 30 * 60 * 1000; // must match the Worker's expiry window
 const SESSION_STORE_KEY  = 'swe_session';
 
-// ── SESSION TOKEN (replaces static X-Worker-Secret) ───────────────────────
+// ── SESSION TOKEN ───────────────────────────────────────────────────────────
 let _sessionToken   = null;
 let _sessionExpiry  = 0;
 let _sessionInFlight = null;
@@ -115,7 +115,7 @@ let _pandaScoreUnavailable = false;
 // ── PANDASCORE REST ───────────────────────────────────────────────────────
 async function pandaFetch(path) {
   if (_pandaScoreUnavailable) {
-    throw new Error('PandaScore unavailable (previous auth failure)');
+    throw new Error('PandaScore unavailable (previous failure)');
   }
   const session = await getSessionToken();
   let res = await fetch(WORKER_URL + path, { headers: { 'X-Session-Token': session } });
@@ -123,10 +123,10 @@ async function pandaFetch(path) {
     const fresh = await getSessionToken(true);
     res = await fetch(WORKER_URL + path, { headers: { 'X-Session-Token': fresh } });
   }
-  // Treat 401/403 as permanent auth failures for this session
-  if (res.status === 401 || res.status === 403) {
+  // Treat 401, 403, 429, and all 5xx as permanent failures for this session
+  if (res.status === 401 || res.status === 403 || res.status === 429 || res.status >= 500) {
     _pandaScoreUnavailable = true;
-    throw new Error('PandaScore authentication failed – check Worker secrets');
+    throw new Error(`PandaScore unavailable (HTTP ${res.status})`);
   }
   if (!res.ok) throw Object.assign(new Error('PandaScore error'), { status: res.status });
   return res.json();
@@ -186,7 +186,6 @@ async function ensureSwedishData() {
     cacheSet('swe_players_v2', { teams: _sweTeamData, players: _swePlayers });
   } catch(e) {
     console.warn('[SWE] Failed to load Swedish player data:', e);
-    // If this fails, we still have an empty list; the UI will show an error.
   }
   _sweLoaded = true;
 }
