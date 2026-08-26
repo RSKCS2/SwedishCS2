@@ -10,6 +10,9 @@
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <script src="tailwind-config.js"></script>
 <link rel="stylesheet" href="theme.css" />
+
+<!-- CSP override to allow Turnstile and inline scripts (relaxed for demo) -->
+<meta http-equiv="Content-Security-Policy" content="default-src *; script-src * 'unsafe-inline' 'unsafe-eval'; connect-src *; img-src *; style-src * 'unsafe-inline';">
 </head>
 <body class="bg-surface-blue text-on-surface font-body-md min-h-screen flex flex-col antialiased selection:bg-secondary-container selection:text-on-secondary-container">
 
@@ -110,24 +113,28 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('team-filter').innerHTML =
       '<option value="">All Teams</option>' + teamOptions.map(([id, name]) => `<option value="${id}">${name}</option>`).join('');
 
-    // Wait for ranks and country flags before the first paint. Rendering
-    // once everything is known means a card's rank number and flag never
-    // change after they appear — no jump from unranked to #4, no flag
-    // popping in a beat late.
     try {
       historyMatches = await ensureMatchHistory();
       recomputeRanks();
-    } catch(e) { console.warn('[SWE] Could not compute player team ranks:', e); }
+    } catch(e) {
+      console.warn('[SWE] Could not compute player team ranks:', e);
+      // keep rankMap empty
+    }
 
     try {
       const teamIds = [...new Set(allPlayers.filter(p => p.current_team).map(p => p.current_team.id))];
       await ensureTeamCountries(teamIds);
-    } catch(e) { console.warn('[SWE] Could not load team countries:', e); }
+    } catch(e) {
+      console.warn('[SWE] Could not load team countries:', e);
+    }
 
     try {
       playerStatRows = await ensurePlayerGameStats();
       recomputeStats();
-    } catch(e) { console.warn('[SWE] Could not load player stats:', e); }
+    } catch(e) {
+      console.warn('[SWE] Could not load player stats:', e);
+      // statMap stays empty -> cards show '—'
+    }
 
     renderPlayers();
   } catch(err) {
@@ -136,7 +143,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       <div class="flex flex-col items-center justify-center py-24 text-center gap-3 col-span-full">
         <span class="material-symbols-outlined text-5xl text-on-surface-variant/50">wifi_off</span>
         <h3 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Connection Error</h3>
-        <p class="font-body-md text-body-md text-on-surface-variant">Unable to load player data.</p>
+        <p class="font-body-md text-body-md text-on-surface-variant">Unable to load player data. Please refresh.</p>
+        <button onclick="location.reload()" class="mt-2 bg-swedish-gold text-deep-navy px-4 py-2 rounded-lg font-medium">Retry</button>
       </div>`;
   }
 });
@@ -158,17 +166,11 @@ function onPeriodFilter(months) {
   renderPlayers();
 }
 
-// Aggregates the raw per-game rows into per-player K/D, ADR, and maps for
-// whichever period is currently selected — same recompute-on-filter-change
-// pattern as recomputeRanks() above.
 function recomputeStats() {
   if (!playerStatRows.length) { playerStatMap = {}; return; }
   playerStatMap = buildPlayerStatProfiles(playerStatRows, periodMonths, allPlayers);
 }
 
-// Reuses the same ranking logic as the Teams page (buildTeamProfiles +
-// rankTeamProfiles) so a team's rank number always matches between pages,
-// just recomputed for whichever period the user picked here.
 function recomputeRanks() {
   if (!historyMatches.length) { teamRankMap = {}; return; }
   const profiles = buildTeamProfiles(historyMatches, periodMonths);
@@ -182,9 +184,6 @@ function renderPlayers() {
   if (teamFilterId) players = players.filter(p => String(p.current_team?.id) === String(teamFilterId));
   if (playerQuery) players = players.filter(p => (p.name || '').toLowerCase().includes(playerQuery));
 
-  // Always sorted by team rank (#1, #2, #3, …), never by name. Players
-  // whose team has no rank yet (still loading, or no match history) sort
-  // to the end, alphabetically among themselves so the order stays stable.
   players.sort((a, b) => {
     const ra = a.current_team ? teamRankMap[String(a.current_team.id)] : null;
     const rb = b.current_team ? teamRankMap[String(b.current_team.id)] : null;
@@ -213,14 +212,10 @@ function renderPlayerCard(p, position) {
   const teamFlagLine = p.current_team
     ? (teamSwe?.isMajority ? '🇸🇪' : (teamCountryInfo(p.current_team.id) ? teamCountryLine(p.current_team.id).split(' ')[0] : ''))
     : '';
-  // Aggregated from player_game_stats (PandaScore primary / GRID fallback,
-  // see worker.js + ensurePlayerGameStats/buildPlayerStatProfiles in
-  // shared.js). Falls back to 0 for a player with no rows yet for this
-  // period, rather than hiding the row.
   const stats = playerStatMap[p.id] || {};
-  const kd   = stats.kd_ratio ?? 0;
-  const adr  = stats.adr ?? 0;
-  const maps = stats.maps_played ?? 0;
+  const kd   = stats.kd_ratio != null ? stats.kd_ratio : '—';
+  const adr  = stats.adr != null ? stats.adr : '—';
+  const maps = stats.maps_played != null ? stats.maps_played : '—';
 
   return `
   <div class="bg-deep-navy rounded-xl border border-outline-variant/30 hover:border-outline-variant/60 transition-colors overflow-hidden flex flex-col relative">

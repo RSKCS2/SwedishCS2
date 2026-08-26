@@ -12,9 +12,6 @@ const SESSION_TTL_MS     = 30 * 60 * 1000; // must match the Worker's expiry win
 const SESSION_STORE_KEY  = 'swe_session';
 
 // ── SESSION TOKEN (replaces static X-Worker-Secret) ───────────────────────
-// Flow: solve Turnstile once (invisible, no user interaction in normal cases)
-// → exchange the Turnstile token for a short-lived signed session token at
-// the Worker → reuse that session token on every poll until it expires.
 let _sessionToken   = null;
 let _sessionExpiry  = 0;
 let _sessionInFlight = null;
@@ -41,16 +38,13 @@ function _initTurnstileWidget() {
   if (_turnstileWidgetId !== null) return;
   _turnstileWidgetId = turnstile.render('#turnstile-container', {
     sitekey: TURNSTILE_SITE_KEY,
-    execution: 'execute', // don't run automatically, only when we call turnstile.execute()
+    execution: 'execute',
     callback: (token) => { if (_turnstilePendingResolve) _turnstilePendingResolve(token); },
     'error-callback': () => { if (_turnstilePendingReject) _turnstilePendingReject(new Error('Turnstile verification failed')); },
     'timeout-callback': () => { if (_turnstilePendingReject) _turnstilePendingReject(new Error('Turnstile timed out')); },
   });
 }
 
-// turnstile.js loads with async/defer, so it can finish downloading after
-// our own code has already started running. Poll briefly instead of
-// assuming it is ready.
 function _waitForTurnstile(timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
     if (typeof turnstile !== 'undefined') { resolve(); return; }
@@ -91,9 +85,6 @@ async function _exchangeSession() {
   return session;
 }
 
-// Returns a valid session token, refreshing it (via Turnstile) only when
-// the cached one is missing or close to expiry. Concurrent callers share
-// the same in-flight exchange instead of triggering duplicate challenges.
 async function getSessionToken(forceRefresh = false) {
   if (!forceRefresh && _sessionToken && _sessionExpiry - Date.now() > 60 * 1000) {
     return _sessionToken;
@@ -157,7 +148,6 @@ let _sweLoaded   = false;
 async function ensureSwedishData() {
   if (_sweLoaded) return;
 
-  // Try cache first (1 hour TTL)
   const cached = cacheGet('swe_players_v2', 6 * 60 * 60 * 1000);
   if (cached) { _sweTeamData = cached.teams || {}; _swePlayers = cached.players || []; _sweLoaded = true; return; }
 
@@ -200,14 +190,11 @@ function getSwedishTeamIds() {
   return Object.keys(_sweTeamData);
 }
 
-// ── TEAM NATIONALITY (majority roster country) ─────────────────────────────
-// A team's own `location` field from PandaScore is often stale or missing,
-// which is why e.g. MIBR (4/5 Brazilian) or GamerLegion (mixed-EU roster)
-// showed up as "International". Instead we fetch each team's actual roster
-// and take the most common player nationality — same rule used to decide
-// whether a squad counts as majority-Swedish, just applied per country.
+// ── TEAM NATIONALITY with failure cache ────────────────────────────────────
 const _teamCountryCacheKey = 'swe_team_country_v1';
 let _teamCountryCache = null;
+let _teamCountryFailures = new Set();
+
 function _getTeamCountryCache() {
   if (_teamCountryCache) return _teamCountryCache;
   _teamCountryCache = cacheGet(_teamCountryCacheKey, 24 * 60 * 60 * 1000) || {};
@@ -217,21 +204,12 @@ function _saveTeamCountryCache() {
   cacheSet(_teamCountryCacheKey, _teamCountryCache);
 }
 
-// European country codes seen in CS2 rosters — used only to decide between
-// showing a specific country flag vs. a generic "Europe" tag for teams
-// whose roster is mixed-European with no single majority nationality.
 const EUROPE_CODES = new Set([
   'SE','NO','DK','FI','IS','DE','FR','GB','IE','NL','BE','LU','ES','PT','IT',
   'CH','AT','PL','CZ','SK','HU','SI','HR','BA','RS','ME','MK','AL','GR','RO',
   'BG','UA','BY','LT','LV','EE','MD','MT','CY','AD','MC','SM','VA','LI','KZ',
 ]);
 
-// Classifies a team's roster country for the flag shown on the card:
-// - 'majority': one nationality has a clear plurality (≥3 of a 5-man
-//   roster, or >60% for other sizes) → show that country's flag.
-// - 'europe': no single majority, but the roster is mostly European
-//   (e.g. G2 Ares, GamerLegion) → show a generic Europe flag.
-// - 'international': mixed with no European plurality either.
 function classifyTeamCountry(players) {
   const counts = {};
   let total = 0;
@@ -259,32 +237,28 @@ function classifyTeamCountry(players) {
   return { type: 'international' };
 }
 
-// Fetches and caches the roster-country classification for a list of team
-// ids. Already-cached teams are skipped. Safe to call repeatedly — only
-// misses hit the network, one request per team.
 async function ensureTeamCountries(teamIds) {
   const cache = _getTeamCountryCache();
-  const missing = [...new Set(teamIds)].filter(id => id && !(id in cache));
+  const missing = [...new Set(teamIds)]
+    .filter(id => id && !(id in cache) && !_teamCountryFailures.has(id));
+
   if (!missing.length) return cache;
 
   let dirty = false;
-  await Promise.all(missing.map(async id => {
-    try {
-      const team = await pandaFetch(`/csgo/teams/${id}`);
-      cache[id] = classifyTeamCountry(team?.players);
-      dirty = true;
-    } catch(e) {
-      // Leave this id out of the cache on failure instead of writing
-      // { type: 'international' } — a Worker hiccup or rate limit isn't
-      // the same fact as "this team really is international", and
-      // caching it for 24h made a transient failure look permanent.
-      // teamCountryLine() already falls back to the globe icon for any
-      // uncached id, so the UI degrades the same way either way; the
-      // only difference is we retry on the next page load instead of
-      // being stuck until the cache expires.
-      console.warn('[SWE] Could not fetch roster for team', id, e);
-    }
-  }));
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < missing.length; i += BATCH_SIZE) {
+    const batch = missing.slice(i, i + BATCH_SIZE);
+    await Promise.all(batch.map(async id => {
+      try {
+        const team = await pandaFetch(`/csgo/teams/${id}`);
+        cache[id] = classifyTeamCountry(team?.players);
+        dirty = true;
+      } catch(e) {
+        _teamCountryFailures.add(id);
+        console.warn('[SWE] Could not fetch roster for team', id, e);
+      }
+    }));
+  }
   if (dirty) _saveTeamCountryCache();
   return cache;
 }
@@ -293,9 +267,6 @@ function teamCountryInfo(teamId) {
   return _getTeamCountryCache()[teamId] || null;
 }
 
-// Renders the flag/line for a team's roster country classification.
-// isMajoritySwedish takes priority (handled by the caller); this covers
-// the rest: a specific country, a generic Europe tag, or International.
 function teamCountryLine(teamId) {
   const info = teamCountryInfo(teamId);
   if (!info) return '🌐 International';
@@ -304,7 +275,7 @@ function teamCountryLine(teamId) {
   return '🌐 International';
 }
 
-// ── TEAM MATCH HISTORY (shared by history.html and teams.html) ────────────
+// ── TEAM MATCH HISTORY ──────────────────────────────────────────────────────
 async function ensureMatchHistory() {
   const CACHE_VERSION     = 'v3';
   const HISTORY_KEY       = 'swe_history_' + CACHE_VERSION;
@@ -333,10 +304,6 @@ async function ensureMatchHistory() {
   return matches;
 }
 
-// Builds a per-Swedish-team profile (logo, recent form, N-month record) from
-// cached/fetched match history. Used by teams.html and players.html.
-// cutoffMonths controls the window used for wins3m/losses3m (default 3, kept
-// for backwards compatibility with existing callers).
 function buildTeamProfiles(matches, cutoffMonths = 3) {
   const profiles = {};
   const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - cutoffMonths);
@@ -365,10 +332,6 @@ function buildTeamProfiles(matches, cutoffMonths = 3) {
   return profiles;
 }
 
-// Ranks team profiles by real recent form: 3-month win differential first,
-// then total 3-month wins, then squad completeness, then name. Used by
-// both teams.html and players.html so a player's rank always matches
-// their team's rank on the Teams page.
 function rankTeamProfiles(profiles) {
   const list = Object.values(profiles);
   list.sort((a, b) => {
@@ -384,15 +347,12 @@ function rankTeamProfiles(profiles) {
   return list;
 }
 
-// ── PLAYER GAME STATS (K/D, ADR, maps — PandaScore primary, GRID fallback) ─
-// Rows are per-player-per-game, fetched and aggregated server-side by the
-// Worker's scheduled handler (see worker.js). This just pulls the growing
-// list down, same caching pattern as ensureMatchHistory().
+// ── PLAYER GAME STATS ──────────────────────────────────────────────────────
 async function ensurePlayerGameStats() {
   const CACHE_VERSION  = 'v1';
   const STATS_KEY       = 'swe_player_stats_' + CACHE_VERSION;
   const STATS_FETCH_KEY = 'swe_player_stats_fetched_' + CACHE_VERSION;
-  const STATS_STALE_MS  = 2 * 60 * 60 * 1000; // matches HISTORY_STALE_MS
+  const STATS_STALE_MS  = 2 * 60 * 60 * 1000;
 
   let rows = cacheGet(STATS_KEY) || [];
   const lastFetch = parseInt(localStorage.getItem(STATS_FETCH_KEY) || '0', 10);
@@ -419,22 +379,16 @@ async function ensurePlayerGameStats() {
   return rows;
 }
 
-// Aggregates per-player-per-game rows into { playerId -> { kd_ratio, adr,
-// maps_played } } for whatever period the user picked, mirroring how
-// buildTeamProfiles/rankTeamProfiles already work for the Teams ranking.
-// Rows sourced from GRID that couldn't be matched to a PandaScore player id
-// (see worker.js's resolveGridPlayerId) are matched here instead by
-// normalized name against the roster passed in via `players`.
 function buildPlayerStatProfiles(rows, periodMonths, players = []) {
   const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - periodMonths);
   const nameToId = {};
   players.forEach(p => { if (p.name) nameToId[normPlayerNameFE(p.name)] = p.id; });
 
-  const agg = {}; // playerId -> { kills, deaths, adrSum, adrCount, maps }
+  const agg = {};
   rows.forEach(r => {
     if (r.date && new Date(r.date) < cutoff) return;
     const pid = r.player_id ?? (r.player_name ? nameToId[normPlayerNameFE(r.player_name)] : null);
-    if (!pid) return; // unmatched GRID row with no roster hit — skip rather than guess
+    if (!pid) return;
     if (!agg[pid]) agg[pid] = { kills: 0, deaths: 0, adrSum: 0, adrCount: 0, maps: 0 };
     const a = agg[pid];
     a.kills += r.kills || 0;
@@ -557,11 +511,6 @@ function extractRoundScore(game, t1Id, t2Id) {
   return { r1, r2 };
 }
 
-// ── PICK/BAN HELPERS ──────────────────────────────────────────────────────
-/**
- * Returns an array of picks in game order (index 0 = game 1, index 1 = game 2, …)
- * Each entry: { teamId, teamName } or null for deciders (no pick).
- */
 function extractPicksInOrder(match) {
   const picks = (match.pick_bans || [])
     .filter(pb => pb.is_pick)
@@ -580,8 +529,6 @@ function swePill(info, align = 'left') {
   return `<span class="swe-pill ${cls}" style="${align==='right'?'align-self:flex-end':''}">${text}</span>`;
 }
 
-// Small inline badge showing how many current Swedish players are on a
-// team, e.g. "3/5 SWE". Returns '' for teams with no Swedish players.
 function sweCountBadge(team, cls = '') {
   const info = team ? sweInfo(team) : null;
   if (!info || !info.count) return '';
@@ -589,7 +536,6 @@ function sweCountBadge(team, cls = '') {
 }
 
 // ── LOGO CACHE ────────────────────────────────────────────────────────────
-// Persists team logo URLs in localStorage so images never need re-fetching info
 const _logoCacheKey = 'swe_logos';
 let _logoCache = null;
 function _getLogoCache() {
@@ -613,7 +559,6 @@ function teamLogo(t, cls = 'team-logo') {
   const cache = _getLogoCache();
   const url   = t?.image_url || t?.logoUrl || (t?.id && cache[t.id]) || null;
   const name  = t?.name || '?';
-  // Save to cache whenever we have a fresh url from API
   if (t?.id && (t.image_url || t.logoUrl)) cacheLogoFromTeam(t);
   if (url)
     return `<img class="${cls}" src="${url}" alt="${name}" loading="lazy" onerror="this.style.display='none'" />`;
@@ -657,8 +602,6 @@ function _flashShareToast() {
   el._hideTimer = setTimeout(() => { el.style.opacity = '0'; }, 2000);
 }
 
-// Orders two teams so the Swedish side renders on the left, unless both or
-// neither team is Swedish (in which case the original order is kept).
 function orderBySwedish(t1, t2) {
   const t1swe = !!sweInfo(t1);
   const t2swe = !!sweInfo(t2);
@@ -666,21 +609,14 @@ function orderBySwedish(t1, t2) {
   return [t1, t2];
 }
 
-// ── VALVE REGIONAL STANDINGS (world/EU rank source) ───────────────────────
-// Reads Valve's own published CS2 Regional Standings from the GitHub repo
-// so team rank badges reflect Valve's official numbers rather than our own
-// derived win/loss form. Falls back gracefully (returns null / empty) if
-// GitHub is unreachable — callers should treat a null rank as "unranked"
-// rather than an error.
+// ── VALVE REGIONAL STANDINGS ─────────────────────────────────────────────
 const VALVE_REPO_API   = 'https://api.github.com/repos/ValveSoftware/counter-strike_regional_standings/contents';
-const VALVE_CACHE_TTL  = 24 * 60 * 60 * 1000; // Valve publishes on a roughly weekly cadence
+const VALVE_CACHE_TTL  = 24 * 60 * 60 * 1000;
 
 function _valveCacheKey(region, dateStr) {
   return `valve_standings_${region}_${dateStr || 'latest'}`;
 }
 
-// Lists available snapshot files (e.g. standings_global_2026_08_03.md) for
-// a region across the given years, newest first.
 async function listValveStandingsDates(region = 'global', years = null) {
   const cacheKey = `valve_dates_${region}`;
   const cached = cacheGet(cacheKey, VALVE_CACHE_TTL);
@@ -700,12 +636,11 @@ async function listValveStandingsDates(region = 'global', years = null) {
       });
     } catch(_) { /* ignore a missing/unreachable year directory */ }
   }
-  all.sort((a, b) => b.date.localeCompare(a.date)); // newest first
+  all.sort((a, b) => b.date.localeCompare(a.date));
   if (all.length) cacheSet(cacheKey, all);
   return all;
 }
 
-// Parses a Valve standings markdown table into [{ rank, points, name, roster }, …]
 function _parseValveStandingsMarkdown(md) {
   const rows = [];
   md.split('\n').forEach(line => {
@@ -721,8 +656,6 @@ function _parseValveStandingsMarkdown(md) {
   return rows;
 }
 
-// Fetches (and caches) a specific dated snapshot, or the latest one if no
-// date is given. Returns [] on any failure so callers can degrade quietly.
 async function fetchValveStandings(region = 'global', dateStr = null) {
   const key = _valveCacheKey(region, dateStr);
   const cached = cacheGet(key, VALVE_CACHE_TTL);
@@ -745,8 +678,6 @@ async function fetchValveStandings(region = 'global', dateStr = null) {
   }
 }
 
-// Finds a team's entry in a Valve standings list by fuzzy name match
-// (reuses the same normalization used for GRID team matching).
 function findValveRank(list, teamName) {
   const target = normName(teamName);
   if (!target || !list.length) return null;
@@ -760,9 +691,6 @@ function teamLocationBadge(team) {
   return `<span class="location-badge">${flag} ${code}</span>`;
 }
 
-// Orders Swedish teams among themselves by their Valve world rank (lower
-// number = better). Teams with no Valve entry sort last and receive no
-// rank. Returns a map of teamId -> Swedish rank (1, 2, 3, …).
 function computeSwedishValveRanks(teams, valveGlobal) {
   const withRank = teams.map(t => ({ t, rank: findValveRank(valveGlobal, t.name)?.rank ?? null }));
   withRank.sort((a, b) => {
@@ -777,13 +705,6 @@ function computeSwedishValveRanks(teams, valveGlobal) {
   return map;
 }
 
-// Builds a readable "tournament / stage" label from a PandaScore match
-// object, e.g. "ESL Pro League Season 21 · Semifinal" instead of a bare
-// tournament name. Falls back gracefully as fields are missing.
-// PandaScore's match.name is often just an auto-generated "Team A vs Team
-// B" label, which is redundant once the card already shows both teams as
-// logos/names — this filters those out so only a real stage name (e.g.
-// "Semifinal", "Grand Final") comes through as the stage.
 function _looksLikeMatchupLabel(name, match) {
   if (/\bvs\.?\b/i.test(name)) return true;
   const t1 = match.opponents?.[0]?.opponent?.name;
