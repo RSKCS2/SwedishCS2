@@ -384,6 +384,80 @@ function rankTeamProfiles(profiles) {
   return list;
 }
 
+// ── PLAYER GAME STATS (K/D, ADR, maps — PandaScore primary, GRID fallback) ─
+// Rows are per-player-per-game, fetched and aggregated server-side by the
+// Worker's scheduled handler (see worker.js). This just pulls the growing
+// list down, same caching pattern as ensureMatchHistory().
+async function ensurePlayerGameStats() {
+  const CACHE_VERSION  = 'v1';
+  const STATS_KEY       = 'swe_player_stats_' + CACHE_VERSION;
+  const STATS_FETCH_KEY = 'swe_player_stats_fetched_' + CACHE_VERSION;
+  const STATS_STALE_MS  = 2 * 60 * 60 * 1000; // matches HISTORY_STALE_MS
+
+  let rows = cacheGet(STATS_KEY) || [];
+  const lastFetch = parseInt(localStorage.getItem(STATS_FETCH_KEY) || '0', 10);
+  const isStale = Date.now() - lastFetch > STATS_STALE_MS;
+
+  if (isStale || !rows.length) {
+    try {
+      const fetched = [];
+      let page = 1;
+      while (true) {
+        const batch = await pandaFetch(`/csgo/player-stats?per_page=100&page=${page}`);
+        if (!batch.length) break;
+        fetched.push(...batch);
+        if (batch.length < 100) break;
+        page++;
+      }
+      if (fetched.length) {
+        rows = fetched;
+        cacheSet(STATS_KEY, rows);
+      }
+      localStorage.setItem(STATS_FETCH_KEY, Date.now().toString());
+    } catch(e) { console.warn('[SWE] Failed to load player stats:', e); }
+  }
+  return rows;
+}
+
+// Aggregates per-player-per-game rows into { playerId -> { kd_ratio, adr,
+// maps_played } } for whatever period the user picked, mirroring how
+// buildTeamProfiles/rankTeamProfiles already work for the Teams ranking.
+// Rows sourced from GRID that couldn't be matched to a PandaScore player id
+// (see worker.js's resolveGridPlayerId) are matched here instead by
+// normalized name against the roster passed in via `players`.
+function buildPlayerStatProfiles(rows, periodMonths, players = []) {
+  const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - periodMonths);
+  const nameToId = {};
+  players.forEach(p => { if (p.name) nameToId[normPlayerNameFE(p.name)] = p.id; });
+
+  const agg = {}; // playerId -> { kills, deaths, adrSum, adrCount, maps }
+  rows.forEach(r => {
+    if (r.date && new Date(r.date) < cutoff) return;
+    const pid = r.player_id ?? (r.player_name ? nameToId[normPlayerNameFE(r.player_name)] : null);
+    if (!pid) return; // unmatched GRID row with no roster hit — skip rather than guess
+    if (!agg[pid]) agg[pid] = { kills: 0, deaths: 0, adrSum: 0, adrCount: 0, maps: 0 };
+    const a = agg[pid];
+    a.kills += r.kills || 0;
+    a.deaths += r.deaths || 0;
+    if (r.adr != null) { a.adrSum += r.adr; a.adrCount++; }
+    a.maps++;
+  });
+
+  const profiles = {};
+  Object.entries(agg).forEach(([pid, a]) => {
+    profiles[pid] = {
+      kd_ratio:    a.maps ? +(a.kills / Math.max(a.deaths, 1)).toFixed(2) : 0,
+      adr:         a.adrCount ? Math.round(a.adrSum / a.adrCount) : 0,
+      maps_played: a.maps,
+    };
+  });
+  return profiles;
+}
+
+function normPlayerNameFE(name) {
+  return (name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 // ── GRID QUERIES ──────────────────────────────────────────────────────────
 const QUERY_CS2_SERIES = `
   query CS2Series($gte: String!, $lte: String!) {

@@ -28,6 +28,10 @@ const KV_LIVE_DATA       = 'live_data';
 const KV_HISTORY_DATA    = 'history_data';
 const KV_HISTORY_CURSOR  = 'history_cursor';
 const KV_SWEDISH_TEAMS   = 'swedish_teams';
+const KV_PLAYER_STATS    = 'player_game_stats';   // growing list of per-player-per-game rows
+const KV_STATS_QUEUE     = 'player_stats_queue';  // finished games waiting to be fetched
+const KV_STATS_DONE      = 'player_stats_done';   // game ids already processed (success OR permanent miss)
+const STATS_BATCH_SIZE   = 5;                     // games fetched per scheduled tick — keep small, rate-limit safe
 
 // ── GRID QUERIES (from shared.js) ─────────────────────────────────────────
 const QUERY_CS2_SERIES = `
@@ -67,6 +71,36 @@ const QUERY_SERIES_STATE = `
         finished
         map { name }
         teams { name score }
+      }
+    }
+  }
+`;
+
+// ⚠️ VERIFY before relying on this in production: player-level fields
+// (kills / deaths / killAssistsGiven / damage) belong to GRID's
+// Statistics Feed product, which is a *separate* product from the
+// central-data / live-data-feed endpoints QUERY_CS2_SERIES and
+// QUERY_SERIES_STATE already use above. Depending on your GRID plan this
+// query may 400, return nulls, or need a different endpoint entirely —
+// check it against a real series id in GRID's GraphQL explorer first.
+const QUERY_SERIES_STATE_PLAYERS = `
+  query SeriesStatePlayers($id: ID!) {
+    seriesState(id: $id) {
+      id
+      games {
+        sequenceNumber
+        finished
+        map { name }
+        teams {
+          name
+          players {
+            name
+            kills
+            deaths
+            killAssistsGiven
+            damage { dealt }
+          }
+        }
       }
     }
   }
@@ -355,6 +389,219 @@ async function mergeHistoryData(existing, newMatches) {
   return Array.from(existingMap.values());
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// PLAYER STATS — PandaScore primary, GRID fallback, queue-based (small
+// batch per scheduled tick, never re-fetches a finished game once done)
+// ─────────────────────────────────────────────────────────────────────────
+
+function normPlayerName(name) {
+  return (name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+// Pulls {gameId, matchId, mapName, t1, t2, date} for every finished game
+// across the cached match history, so the queue always reflects reality
+// even if a match was merged into history after its games already ended.
+function extractFinishedGames(matches) {
+  const out = [];
+  matches.forEach(m => {
+    (m.games || []).forEach(g => {
+      if (g.status !== 'finished' && !g.finished) return;
+      if (!g.id) return;
+      out.push({
+        gameId:  g.id,
+        matchId: m.id,
+        mapName: g.map?.name || null,
+        t1: m.opponents?.[0]?.opponent || null,
+        t2: m.opponents?.[1]?.opponent || null,
+        date: m.begin_at || m.end_at || null,
+      });
+    });
+  });
+  return out;
+}
+
+async function getStatsQueue(env) {
+  return JSON.parse(await env.MATCH_DATA.get(KV_STATS_QUEUE) || '[]');
+}
+
+async function getStatsDone(env) {
+  return new Set(JSON.parse(await env.MATCH_DATA.get(KV_STATS_DONE) || '[]'));
+}
+
+// Adds newly-finished games to the queue. Skips anything already done or
+// already queued, so this is safe to call every scheduled tick.
+async function enqueueFinishedGames(matches, env) {
+  const done = await getStatsDone(env);
+  const queue = await getStatsQueue(env);
+  const queuedIds = new Set(queue.map(q => q.gameId));
+  let added = 0;
+  extractFinishedGames(matches).forEach(g => {
+    if (done.has(g.gameId) || queuedIds.has(g.gameId)) return;
+    queue.push(g);
+    queuedIds.add(g.gameId);
+    added++;
+  });
+  if (added) await env.MATCH_DATA.put(KV_STATS_QUEUE, JSON.stringify(queue));
+  return added;
+}
+
+// Extracts per-player rows from a PandaScore /csgo/games/{id} response.
+// ⚠️ VERIFY: PandaScore's documented shape nests stats under
+// game.players[].player_stats, but which fields are actually populated
+// (ADR in particular) depends on plan tier — sanity-check a real response
+// once this is deployed rather than trusting these field names blind.
+function extractPandaPlayerRows(game, meta) {
+  const rows = [];
+  (game?.players || []).forEach(gp => {
+    const stats = gp.player_stats || gp; // some plans flatten stats onto the player entry directly
+    const playerId = gp.player?.id ?? gp.id;
+    if (!playerId) return;
+    rows.push({
+      game_id:    meta.gameId,
+      match_id:   meta.matchId,
+      player_id:  playerId,
+      team_id:    gp.team_id ?? gp.team?.id ?? null,
+      kills:      stats.kills ?? 0,
+      deaths:     stats.deaths ?? 0,
+      assists:    stats.assists ?? 0,
+      headshots:  stats.headshots ?? 0,
+      adr:        stats.adr ?? stats.damage_per_round ?? null, // null (not 0) if your plan doesn't expose it
+      map:        meta.mapName,
+      date:       meta.date,
+      source:     'pandascore',
+    });
+  });
+  return rows;
+}
+
+async function fetchPandaGameStats(gameId, token) {
+  const res = await fetch(`${PANDA_BASE}/csgo/games/${gameId}?include=players,players.player_stats`, {
+    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+  });
+  if (!res.ok) {
+    console.error(`PandaScore game ${gameId} fetch failed: ${res.status}`);
+    return null;
+  }
+  return res.json();
+}
+
+// Best-effort match of a GRID player name to a PandaScore player id, using
+// the already-KV-cached team roster (see fetchTeamRoster). Falls back to
+// null (row is still stored, keyed by name) if no roster is cached yet.
+async function resolveGridPlayerId(name, teamId, env) {
+  if (!teamId) return null;
+  try {
+    const cached = await env.MATCH_DATA.get(`team_roster_${teamId}`);
+    if (!cached) return null;
+    const roster = JSON.parse(cached);
+    const target = normPlayerName(name);
+    const match = (roster?.players || []).find(p => normPlayerName(p.name) === target);
+    return match?.id ?? null;
+  } catch(_) { return null; }
+}
+
+// GRID fallback — only reached when PandaScore has no per-player stats for
+// a game. Requires meta.t1/t2 (from the PandaScore match) to resolve GRID's
+// series id via the same team-name fuzzy match used for live matches, and
+// to attribute GRID's name-keyed players back to a PandaScore player id.
+async function fetchGridPlayerRows(meta, token, env) {
+  try {
+    const centralResult = await queryGridCentral(
+      {
+        gte: new Date(new Date(meta.date).getTime() - 24 * 60 * 60 * 1000).toISOString(),
+        lte: new Date(new Date(meta.date).getTime() + 24 * 60 * 60 * 1000).toISOString(),
+      },
+      token
+    );
+    const gridSeriesList = centralResult?.data?.allSeries?.edges?.map(e => e.node) || [];
+    const series = findGridSeries(meta.t1?.name || '', meta.t2?.name || '', gridSeriesList);
+    if (!series) return [];
+
+    const res = await fetch(GRID_LIVE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': token },
+      body: JSON.stringify({ query: QUERY_SERIES_STATE_PLAYERS, variables: { id: series.id } }),
+    });
+    if (!res.ok) { console.error(`GRID stats query failed: ${res.status}`); return []; }
+    const json = await res.json();
+    const game = json?.data?.seriesState?.games?.find(g => g.map?.name === meta.mapName);
+    if (!game) return [];
+
+    const rows = [];
+    for (const t of (game.teams || [])) {
+      const teamObj = normName(t.name) === normName(meta.t1?.name) ? meta.t1 : meta.t2;
+      for (const p of (t.players || [])) {
+        const playerId = await resolveGridPlayerId(p.name, teamObj?.id, env);
+        rows.push({
+          game_id:     meta.gameId,
+          match_id:    meta.matchId,
+          player_id:   playerId,       // may be null — see resolveGridPlayerId
+          player_name: p.name,
+          team_id:     teamObj?.id ?? null,
+          kills:       p.kills ?? 0,
+          deaths:      p.deaths ?? 0,
+          assists:     p.killAssistsGiven ?? 0,
+          headshots:   null,
+          adr:         p.damage?.dealt ?? null,
+          map:         meta.mapName,
+          date:        meta.date,
+          source:      'grid',
+        });
+      }
+    }
+    return rows;
+  } catch(err) {
+    console.error(`GRID stats fetch error: ${err.message}`);
+    return [];
+  }
+}
+
+// Pops a small batch off the queue, fetches PandaScore first / GRID second,
+// appends new rows to the growing KV_PLAYER_STATS list, and marks every
+// attempted game as done — including ones where neither source had data,
+// so a permanently-stat-less game isn't retried forever.
+async function processStatsQueue(env) {
+  const queue = await getStatsQueue(env);
+  if (!queue.length) return { processed: 0, newRows: 0, remaining: 0 };
+
+  const batch     = queue.slice(0, STATS_BATCH_SIZE);
+  const remaining = queue.slice(STATS_BATCH_SIZE);
+  const done = await getStatsDone(env);
+
+  const existingJson = await env.MATCH_DATA.get(KV_PLAYER_STATS);
+  const existingStats = existingJson ? JSON.parse(existingJson) : [];
+  const existingKeys = new Set(existingStats.map(r => `${r.game_id}_${r.player_id ?? r.player_name}`));
+  let newRowCount = 0;
+
+  for (const meta of batch) {
+    let rows = [];
+    try {
+      const game = await fetchPandaGameStats(meta.gameId, env.PANDASCORE_TOKEN);
+      rows = extractPandaPlayerRows(game, meta);
+    } catch(e) { console.error(`Panda stats fetch error for game ${meta.gameId}: ${e.message}`); }
+
+    if (!rows.length && env.GRID_TOKEN) {
+      rows = await fetchGridPlayerRows(meta, env.GRID_TOKEN, env);
+    }
+
+    rows.forEach(r => {
+      const key = `${r.game_id}_${r.player_id ?? r.player_name}`;
+      if (!existingKeys.has(key)) {
+        existingStats.push(r);
+        existingKeys.add(key);
+        newRowCount++;
+      }
+    });
+    done.add(meta.gameId);
+  }
+
+  await env.MATCH_DATA.put(KV_PLAYER_STATS, JSON.stringify(existingStats));
+  await env.MATCH_DATA.put(KV_STATS_DONE, JSON.stringify([...done]));
+  await env.MATCH_DATA.put(KV_STATS_QUEUE, JSON.stringify(remaining));
+
+  return { processed: batch.length, newRows: newRowCount, remaining: remaining.length };
+}
+
 async function handleScheduled(env) {
   try {
     console.log('Scheduled handler triggered');
@@ -411,6 +658,20 @@ async function handleScheduled(env) {
       await env.MATCH_DATA.put(KV_HISTORY_DATA, JSON.stringify(mergedHistory));
       
       console.log(`History updated: ${mergedHistory.length} total matches`);
+    }
+
+    // ─── PLAYER STATS (small batch per run, never re-fetches a done game) ─
+    console.log('Processing player stats queue...');
+    try {
+      const historyJson = await env.MATCH_DATA.get(KV_HISTORY_DATA);
+      const historyForQueue = historyJson ? JSON.parse(historyJson) : [];
+      const added = await enqueueFinishedGames(historyForQueue, env);
+      if (added) console.log(`Queued ${added} newly finished games for stats`);
+
+      const { processed, newRows, remaining } = await processStatsQueue(env);
+      if (processed) console.log(`Player stats: processed ${processed} games, ${newRows} new rows, ${remaining} left in queue`);
+    } catch(e) {
+      console.error(`Player stats pipeline error: ${e.message}`);
     }
 
     console.log('Scheduled handler completed');
@@ -557,6 +818,18 @@ async function handleFetch(request, env) {
         const startIdx = (pageParam - 1) * perPageParam;
         const endIdx = startIdx + perPageParam;
         data = allHistory.slice(startIdx, endIdx);
+      }
+    } else if (path.includes('/player-stats')) {
+      // Serve per-player-per-game rows from player_game_stats, same
+      // pagination pattern as /matches/past
+      const statsJson = await env.MATCH_DATA.get(KV_PLAYER_STATS);
+      if (statsJson) {
+        const allStats = JSON.parse(statsJson);
+        const startIdx = (pageParam - 1) * perPageParam;
+        const endIdx = startIdx + perPageParam;
+        data = allStats.slice(startIdx, endIdx);
+      } else {
+        data = []; // no stats collected yet — empty list, not an error
       }
     }
 

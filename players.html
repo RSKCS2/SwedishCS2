@@ -97,6 +97,8 @@ let teamFilterId = '';
 let periodMonths = 1;
 let teamRankMap = {};
 let historyMatches = [];
+let playerStatRows = [];
+let playerStatMap = {};
 
 window.addEventListener('DOMContentLoaded', async () => {
   try {
@@ -121,6 +123,11 @@ window.addEventListener('DOMContentLoaded', async () => {
       const teamIds = [...new Set(allPlayers.filter(p => p.current_team).map(p => p.current_team.id))];
       await ensureTeamCountries(teamIds);
     } catch(e) { console.warn('[SWE] Could not load team countries:', e); }
+
+    try {
+      playerStatRows = await ensurePlayerGameStats();
+      recomputeStats();
+    } catch(e) { console.warn('[SWE] Could not load player stats:', e); }
 
     renderPlayers();
   } catch(err) {
@@ -147,7 +154,16 @@ function onTeamFilter(id) {
 function onPeriodFilter(months) {
   periodMonths = parseInt(months, 10);
   recomputeRanks();
+  recomputeStats();
   renderPlayers();
+}
+
+// Aggregates the raw per-game rows into per-player K/D, ADR, and maps for
+// whichever period is currently selected — same recompute-on-filter-change
+// pattern as recomputeRanks() above.
+function recomputeStats() {
+  if (!playerStatRows.length) { playerStatMap = {}; return; }
+  playerStatMap = buildPlayerStatProfiles(playerStatRows, periodMonths, allPlayers);
 }
 
 // Reuses the same ranking logic as the Teams page (buildTeamProfiles +
@@ -197,11 +213,14 @@ function renderPlayerCard(p, position) {
   const teamFlagLine = p.current_team
     ? (teamSwe?.isMajority ? '🇸🇪' : (teamCountryInfo(p.current_team.id) ? teamCountryLine(p.current_team.id).split(' ')[0] : ''))
     : '';
-  // Player-level stats aren't wired up to a data source yet — show 0s
-  // rather than hiding the row, so the layout doesn't jump once they are.
-  const kd   = p.kd_ratio ?? 0;
-  const adr  = p.adr ?? 0;
-  const maps = p.maps_played ?? 0;
+  // Aggregated from player_game_stats (PandaScore primary / GRID fallback,
+  // see worker.js + ensurePlayerGameStats/buildPlayerStatProfiles in
+  // shared.js). Falls back to 0 for a player with no rows yet for this
+  // period, rather than hiding the row.
+  const stats = playerStatMap[p.id] || {};
+  const kd   = stats.kd_ratio ?? 0;
+  const adr  = stats.adr ?? 0;
+  const maps = stats.maps_played ?? 0;
 
   return `
   <div class="bg-deep-navy rounded-xl border border-outline-variant/30 hover:border-outline-variant/60 transition-colors overflow-hidden flex flex-col relative">
