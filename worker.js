@@ -22,6 +22,7 @@ const KV_LIVE_DATA       = 'live_data';
 const KV_HISTORY_DATA    = 'history_data';
 const KV_HISTORY_CURSOR  = 'history_cursor';
 const KV_SWEDISH_TEAMS   = 'swedish_teams';
+const KV_SWEDISH_TEAM_NAMES = 'swedish_team_names';
 const KV_PLAYER_STATS    = 'player_game_stats';
 const KV_STATS_QUEUE     = 'player_stats_queue';
 const KV_STATS_DONE      = 'player_stats_done';
@@ -257,6 +258,128 @@ async function fetchSwedishPlayers(token) {
   return fetchPandascoreWithPagination(url, token);
 }
 
+async function tryPanda(fetcher, fallback = null) {
+  try {
+    return await fetcher();
+  } catch (err) {
+    console.error(`PandaScore failed: ${err.message}`);
+    return fallback;
+  }
+}
+
+function saveSwedishTeamMetadata(players, env) {
+  const ids = new Set();
+  const names = new Set();
+
+  for (const player of (players || [])) {
+    const team = player.current_team;
+    if (!team) continue;
+    if (team.id) ids.add(String(team.id));
+    if (team.name) names.add(team.name);
+  }
+
+  return Promise.all([
+    env.MATCH_DATA.put(KV_SWEDISH_TEAMS, JSON.stringify([...ids])),
+    env.MATCH_DATA.put(KV_SWEDISH_TEAM_NAMES, JSON.stringify([...names])),
+  ]);
+}
+
+async function getCachedSwedishTeamNames(env) {
+  try {
+    return JSON.parse(await env.MATCH_DATA.get(KV_SWEDISH_TEAM_NAMES) || '[]');
+  } catch (_) {
+    return [];
+  }
+}
+
+function isGridSwedishSeries(series, swedishTeamNames) {
+  const targetNames = new Set((swedishTeamNames || []).map(normName));
+  if (!targetNames.size) return false;
+
+  return (series.teams || []).some(team =>
+    targetNames.has(normName(team.baseInfo?.name))
+  );
+}
+
+function gridSeriesToPandaMatch(series, state = null) {
+  const teams = (series.teams || []).map(t => ({
+    opponent: {
+      id: `grid-${t.baseInfo?.id ?? ''}`,
+      name: t.baseInfo?.name || 'TBD',
+      image_url: t.baseInfo?.logoUrl || null,
+    },
+    scoreAdvantage: t.scoreAdvantage ?? 0,
+  }));
+
+  const games = (state?.games || []).map(g => ({
+    sequence_number: g.sequenceNumber,
+    status: g.finished ? 'finished' : g.started ? 'running' : 'not_started',
+    finished: !!g.finished,
+    map: g.map ? { name: g.map.name } : null,
+    teams: (g.teams || []).map(t => ({
+      id: t.id,
+      team: { id: t.id, name: t.name },
+      score: t.score ?? 0,
+    })),
+  }));
+
+  let results = [];
+  if (state?.teams?.length && teams.length) {
+    results = state.teams.map(st => {
+      const matchTeam = teams.find(t => normName(t.opponent.name) === normName(st.name));
+      return {
+        team_id: matchTeam?.opponent?.id,
+        score: st.score ?? 0,
+      };
+    });
+  }
+
+  const finished = !!state?.finished;
+  const started = !!state?.started;
+
+  return {
+    id: `grid-${series.id}`,
+    begin_at: series.startTimeScheduled,
+    end_at: finished ? series.startTimeScheduled : null,
+    status: finished ? 'finished' : started ? 'running' : 'not_started',
+    name: series.title?.nameShortened || `${teams[0]?.opponent?.name || 'TBD'} vs ${teams[1]?.opponent?.name || 'TBD'}`,
+    opponents: teams.slice(0, 2),
+    results,
+    games,
+    winner: null,
+    league: null,
+    serie: null,
+    tournament: { name: series.tournament?.name || 'CS2' },
+    grid_series_id: series.id,
+    grid_state: state,
+    source: 'grid',
+  };
+}
+
+async function fetchGridSeriesWindow(gridToken, gte, lte, swedishTeamNames = []) {
+  const result = await queryGridCentral({ gte, lte }, gridToken);
+  const series = result?.data?.allSeries?.edges?.map(e => e.node) || [];
+  return swedishTeamNames.length
+    ? series.filter(s => isGridSwedishSeries(s, swedishTeamNames))
+    : series;
+}
+
+async function fetchGridMatches(gridToken, swedishTeamNames, gte, lte, includeState = false) {
+  const series = await fetchGridSeriesWindow(gridToken, gte, lte, swedishTeamNames);
+  const out = [];
+
+  for (const s of series) {
+    let state = null;
+    if (includeState || new Date(s.startTimeScheduled) <= new Date()) {
+      const live = await queryGridLive(s.id, gridToken);
+      state = live?.data?.seriesState || null;
+    }
+    out.push(gridSeriesToPandaMatch(s, state));
+  }
+
+  return out;
+}
+
 async function fetchRunningMatches(token) {
   const url = `${PANDA_BASE}/csgo/matches/running?per_page=50&include=opponents,results,games,pick_bans`;
   return fetchPandascoreWithPagination(url, token, 1);
@@ -300,16 +423,25 @@ async function attachGridStateToRunningMatches(runningMatches, swedishTeamIds, g
 }
 
 async function rotateHistoryTeam(env) {
-  let teams = JSON.parse(await env.MATCH_DATA.get(KV_SWEDISH_TEAMS) || '[]');
-  if (teams.length === 0) {
-    const players = await fetchSwedishPlayers(env.PANDASCORE_TOKEN);
-    const teamSet = new Set();
-    for (const player of players) {
-      if (player.current_team?.id) teamSet.add(player.current_team.id);
+  let teams = [];
+  try {
+    teams = JSON.parse(await env.MATCH_DATA.get(KV_SWEDISH_TEAMS) || '[]');
+  } catch (_) {}
+
+  if (!teams.length && env.PANDASCORE_TOKEN) {
+    const players = await tryPanda(
+      () => fetchSwedishPlayers(env.PANDASCORE_TOKEN),
+      []
+    );
+    if (players.length) {
+      const teamSet = new Set(
+        players.map(p => p.current_team?.id).filter(Boolean).map(String)
+      );
+      teams = Array.from(teamSet);
+      await saveSwedishTeamMetadata(players, env);
     }
-    teams = Array.from(teamSet);
-    await env.MATCH_DATA.put(KV_SWEDISH_TEAMS, JSON.stringify(teams));
   }
+
   if (teams.length === 0) return null;
   let cursor = parseInt(await env.MATCH_DATA.get(KV_HISTORY_CURSOR) || '0');
   cursor = cursor % teams.length;
@@ -376,7 +508,9 @@ async function enqueueFinishedGames(matches, env) {
 
 function extractPandaPlayerRows(game, meta) {
   const rows = [];
-  (game?.players || []).forEach(gp => {
+  const playerRows = Array.isArray(game) ? game : (game?.players || []);
+
+  playerRows.forEach(gp => {
     const stats = gp.player_stats || gp;
     const playerId = gp.player?.id ?? gp.id;
     if (!playerId) return;
@@ -398,12 +532,13 @@ function extractPandaPlayerRows(game, meta) {
   return rows;
 }
 
-async function fetchPandaGameStats(gameId, token) {
-  const res = await fetch(`${PANDA_BASE}/csgo/games/${gameId}?include=players,players.player_stats`, {
-    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
-  });
+async function fetchPandaGameStats(meta, token) {
+  const res = await fetch(
+    `${PANDA_BASE}/csgo/matches/${meta.matchId}/players/stats`,
+    { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }
+  );
   if (!res.ok) {
-    console.error(`PandaScore game ${gameId} fetch failed: ${res.status}`);
+    console.error(`PandaScore match ${meta.matchId} player stats failed: ${res.status}`);
     return null;
   }
   return res.json();
@@ -457,7 +592,7 @@ async function fetchGridPlayerRows(meta, token, env) {
           deaths:      p.deaths ?? 0,
           assists:     p.killAssistsGiven ?? 0,
           headshots:   null,
-          adr:         p.damage?.dealt ?? null,
+          adr:         null,
           map:         meta.mapName,
           date:        meta.date,
           source:      'grid',
@@ -484,7 +619,7 @@ async function processStatsQueue(env) {
   for (const meta of batch) {
     let rows = [];
     try {
-      const game = await fetchPandaGameStats(meta.gameId, env.PANDASCORE_TOKEN);
+      const game = await fetchPandaGameStats(meta, env.PANDASCORE_TOKEN);
       rows = extractPandaPlayerRows(game, meta);
     } catch(e) { console.error(`Panda stats fetch error for game ${meta.gameId}: ${e.message}`); }
     if (!rows.length && env.GRID_TOKEN) {
@@ -498,7 +633,10 @@ async function processStatsQueue(env) {
         newRowCount++;
       }
     });
-    done.add(meta.gameId);
+    // Only mark the game done when at least one provider returned rows.
+    // Otherwise keep it in the queue so the next cron run can retry.
+    if (rows.length) done.add(meta.gameId);
+    else remaining.push(meta);
   }
   await env.MATCH_DATA.put(KV_PLAYER_STATS, JSON.stringify(existingStats));
   await env.MATCH_DATA.put(KV_STATS_DONE, JSON.stringify([...done]));
@@ -511,50 +649,142 @@ async function handleScheduled(env) {
   try {
     console.log('Scheduled handler triggered');
 
-    // Live data
-    console.log('Fetching live data...');
-    const players = await fetchSwedishPlayers(env.PANDASCORE_TOKEN);
-    const swedishTeamIds = new Set();
-    for (const player of players) {
-      if (player.current_team?.id) swedishTeamIds.add(player.current_team.id);
+    const oldLiveJson = await env.MATCH_DATA.get(KV_LIVE_DATA);
+    const oldLive = oldLiveJson ? JSON.parse(oldLiveJson) : null;
+
+    // 1) Swedish player/team discovery:
+    // PandaScore is preferred, but cached metadata survives Panda outages.
+    let players = await tryPanda(
+      () => fetchSwedishPlayers(env.PANDASCORE_TOKEN),
+      []
+    );
+
+    let swedishTeamNames = [];
+    if (players.length) {
+      swedishTeamNames = [...new Set(
+        players.map(p => p.current_team?.name).filter(Boolean)
+      )];
+      await saveSwedishTeamMetadata(players, env);
+    } else {
+      swedishTeamNames = await getCachedSwedishTeamNames(env);
+      if (oldLive?.players?.length) players = oldLive.players;
     }
-    let runningMatches = await fetchRunningMatches(env.PANDASCORE_TOKEN);
-    runningMatches = runningMatches.filter(m => isSwedishTeam(m, Array.from(swedishTeamIds)));
-    runningMatches = await attachGridStateToRunningMatches(runningMatches, Array.from(swedishTeamIds), env.GRID_TOKEN);
-    let upcomingMatches = await fetchUpcomingMatches(env.PANDASCORE_TOKEN);
-    upcomingMatches = upcomingMatches.filter(m => isSwedishTeam(m, Array.from(swedishTeamIds)));
+
+    // 2) Running/upcoming matches:
+    // PandaScore first; GRID becomes the fallback for the same time windows.
+    let runningMatches = await tryPanda(
+      () => fetchRunningMatches(env.PANDASCORE_TOKEN),
+      null
+    );
+
+    let upcomingMatches = await tryPanda(
+      () => fetchUpcomingMatches(env.PANDASCORE_TOKEN),
+      null
+    );
+
+    const now = new Date();
+    const runningGte = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString();
+    const runningLte = new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString();
+    const upcomingGte = now.toISOString();
+    const upcomingLte = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    if (runningMatches === null && env.GRID_TOKEN && swedishTeamNames.length) {
+      runningMatches = await fetchGridMatches(
+        env.GRID_TOKEN, swedishTeamNames, runningGte, runningLte, true
+      );
+    }
+
+    if (upcomingMatches === null && env.GRID_TOKEN && swedishTeamNames.length) {
+      upcomingMatches = await fetchGridMatches(
+        env.GRID_TOKEN, swedishTeamNames, upcomingGte, upcomingLte, false
+      );
+    }
+
+    runningMatches = (runningMatches || []).filter(m =>
+      m.opponents?.length === 2 &&
+      (swedishTeamNames.length
+        ? m.opponents.some(o => swedishTeamNames.some(n => normName(n) === normName(o.opponent?.name)))
+        : true)
+    );
+
+    upcomingMatches = (upcomingMatches || []).filter(m =>
+      m.opponents?.length === 2 &&
+      (swedishTeamNames.length
+        ? m.opponents.some(o => swedishTeamNames.some(n => normName(n) === normName(o.opponent?.name)))
+        : true)
+    );
+
+    // Enrich Panda-sourced running matches with GRID live state when possible.
+    if (env.GRID_TOKEN && runningMatches.length) {
+      runningMatches = await attachGridStateToRunningMatches(
+        runningMatches,
+        [...new Set(
+          players.map(p => p.current_team?.id).filter(Boolean)
+        )],
+        env.GRID_TOKEN
+      );
+    }
+
     const liveData = {
       timestamp: new Date().toISOString(),
       players,
       running_matches: runningMatches,
       upcoming_matches: upcomingMatches,
     };
-    await env.MATCH_DATA.put(KV_LIVE_DATA, JSON.stringify(liveData));
-    console.log('Live data updated');
 
-    // History data (one team per run)
-    console.log('Fetching history data...');
-    const rotation = await rotateHistoryTeam(env);
+    await env.MATCH_DATA.put(KV_LIVE_DATA, JSON.stringify(liveData));
+    console.log(`Live data updated from ${runningMatches.length || 0} running + ${upcomingMatches.length || 0} upcoming matches`);
+
+    // 3) History:
+    // Prefer PandaScore one-team rotation. If unavailable, use GRID series
+    // state over a recent window and merge the converted matches.
+    let rotation = await rotateHistoryTeam(env);
+
     if (rotation) {
-      console.log(`Fetching history for team ${rotation.teamId} (cursor: ${rotation.cursor})`);
-      const newMatches = await fetchSwedishTeamMatches(rotation.teamId, env.PANDASCORE_TOKEN);
+      const newMatches = await tryPanda(
+        () => fetchSwedishTeamMatches(rotation.teamId, env.PANDASCORE_TOKEN),
+        null
+      );
+
+      if (newMatches) {
+        const existingHistoryJson = await env.MATCH_DATA.get(KV_HISTORY_DATA);
+        const existingHistory = existingHistoryJson ? JSON.parse(existingHistoryJson) : [];
+        const mergedHistory = await mergeHistoryData(existingHistory, newMatches);
+        await env.MATCH_DATA.put(KV_HISTORY_DATA, JSON.stringify(mergedHistory));
+      } else if (env.GRID_TOKEN && swedishTeamNames.length) {
+        const historyGte = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+        const historyLte = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        const gridHistory = await fetchGridMatches(
+          env.GRID_TOKEN, swedishTeamNames, historyGte, historyLte, true
+        );
+        const existingHistoryJson = await env.MATCH_DATA.get(KV_HISTORY_DATA);
+        const existingHistory = existingHistoryJson ? JSON.parse(existingHistoryJson) : [];
+        const mergedHistory = await mergeHistoryData(existingHistory, gridHistory);
+        await env.MATCH_DATA.put(KV_HISTORY_DATA, JSON.stringify(mergedHistory));
+      }
+    } else if (env.GRID_TOKEN && swedishTeamNames.length) {
+      const historyGte = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+      const historyLte = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const gridHistory = await fetchGridMatches(
+        env.GRID_TOKEN, swedishTeamNames, historyGte, historyLte, true
+      );
       const existingHistoryJson = await env.MATCH_DATA.get(KV_HISTORY_DATA);
       const existingHistory = existingHistoryJson ? JSON.parse(existingHistoryJson) : [];
-      const mergedHistory = await mergeHistoryData(existingHistory, newMatches);
+      const mergedHistory = await mergeHistoryData(existingHistory, gridHistory);
       await env.MATCH_DATA.put(KV_HISTORY_DATA, JSON.stringify(mergedHistory));
-      console.log(`History updated: ${mergedHistory.length} total matches`);
     }
 
-    // Player stats queue
-    console.log('Processing player stats queue...');
+    // 4) Player stats queue. GRID remains the secondary provider per game.
     try {
       const historyJson = await env.MATCH_DATA.get(KV_HISTORY_DATA);
       const historyForQueue = historyJson ? JSON.parse(historyJson) : [];
       const added = await enqueueFinishedGames(historyForQueue, env);
       if (added) console.log(`Queued ${added} newly finished games for stats`);
       const { processed, newRows, remaining } = await processStatsQueue(env);
-      if (processed) console.log(`Player stats: processed ${processed} games, ${newRows} new rows, ${remaining} left in queue`);
-    } catch(e) {
+      if (processed) {
+        console.log(`Player stats: processed ${processed} games, ${newRows} new rows, ${remaining} left in queue`);
+      }
+    } catch (e) {
       console.error(`Player stats pipeline error: ${e.message}`);
     }
 
@@ -646,8 +876,15 @@ async function handleFetch(request, env) {
         });
       } catch (err) {
         console.error(`Team roster fetch error: ${err.message}`);
-        return new Response(JSON.stringify({ error: 'Could not fetch team roster' }), {
-          status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+        const cached = await env.MATCH_DATA.get(`team_roster_${teamId}`);
+        if (cached) {
+          return new Response(cached, {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
+          });
+        }
+        return new Response(JSON.stringify({ error: 'Could not fetch team roster and no cached roster exists' }), {
+          status: 503, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
         });
       }
     }
@@ -666,7 +903,7 @@ async function handleFetch(request, env) {
           headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
         });
       }
-      // Fallback: fetch from PandaScore
+      // Fallback: PandaScore, then stale cached players.
       try {
         const players = await fetchPandascoreWithPagination(
           `${PANDA_BASE}/csgo/players?filter[nationality]=SE&per_page=100`,
@@ -677,8 +914,18 @@ async function handleFetch(request, env) {
           headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
         });
       } catch (err) {
-        return new Response(JSON.stringify({ error: 'Failed to fetch players' }), {
-          status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+        // Last resort: stale KV copy from the last successful scheduler run.
+        const cached = env.MATCH_DATA.get(KV_LIVE_DATA);
+        const cachedJson = await cached;
+        if (cachedJson) {
+          const liveData = JSON.parse(cachedJson);
+          return new Response(JSON.stringify(liveData.players || []), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
+          });
+        }
+        return new Response(JSON.stringify({ error: 'Failed to fetch players from PandaScore and no cached data exists' }), {
+          status: 503, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
         });
       }
     }
@@ -770,8 +1017,7 @@ async function handleFetch(request, env) {
       }
       // Fallback: empty array
       return new Response(JSON.stringify([]), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+        status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
       });
     }
 

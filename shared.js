@@ -123,10 +123,15 @@ async function pandaFetch(path) {
     const fresh = await getSessionToken(true);
     res = await fetch(WORKER_URL + path, { headers: { 'X-Session-Token': fresh } });
   }
-  // Treat 401, 403, 429, and all 5xx as permanent failures for this session
-  if (res.status === 401 || res.status === 403 || res.status === 429 || res.status >= 500) {
+  // The Worker may transparently fall back to GRID. Only mark PandaScore
+  // unavailable when the Worker itself cannot satisfy the request.
+  if (res.status === 429 || res.status >= 500) {
     _pandaScoreUnavailable = true;
-    throw new Error(`PandaScore unavailable (HTTP ${res.status})`);
+    throw new Error(`Data backend unavailable (HTTP ${res.status})`);
+  }
+  if (res.status === 401 || res.status === 403) {
+    _pandaScoreUnavailable = true;
+    throw new Error(`Data backend authorization failed (HTTP ${res.status})`);
   }
   if (!res.ok) throw Object.assign(new Error('PandaScore error'), { status: res.status });
   return res.json();
@@ -134,9 +139,6 @@ async function pandaFetch(path) {
 
 // ── GRID GRAPHQL ──────────────────────────────────────────────────────────
 async function gridFetch(endpoint, query, variables = {}) {
-  if (_pandaScoreUnavailable) {
-    throw new Error('PandaScore unavailable – skipping GRID');
-  }
   const session = await getSessionToken();
   const doFetch = (token) => fetch(WORKER_URL + endpoint, {
     method:  'POST',
