@@ -188,11 +188,11 @@ function renderPlayers() {
     return;
   }
 
-  document.getElementById('content').innerHTML = players.map(renderPlayerCard).join('');
+  document.getElementById('content').innerHTML = players.map((p, i) => renderPlayerCard(p, i + 1)).join('');
 }
 
-function renderPlayerCard(p) {
-  const rank = p.current_team ? teamRankMap[String(p.current_team.id)] : null;
+function renderPlayerCard(p, position) {
+  const rank = position;
   const teamSwe = p.current_team ? sweInfo(p.current_team) : null;
   const teamFlagLine = p.current_team
     ? (teamSwe?.isMajority ? '🇸🇪' : (teamCountryInfo(p.current_team.id) ? teamCountryLine(p.current_team.id).split(' ')[0] : ''))
@@ -207,7 +207,7 @@ function renderPlayerCard(p) {
   <div class="bg-deep-navy rounded-xl border border-outline-variant/30 hover:border-outline-variant/60 transition-colors overflow-hidden flex flex-col relative">
     ${rank ? `<div class="absolute top-2 left-2 z-10 w-8 h-8 rounded-lg bg-swedish-gold text-deep-navy font-black flex items-center justify-center text-xs">#${rank}</div>` : ''}
     <div class="h-48 bg-surface-container-high relative overflow-hidden">
-      ${teamLogo({ image_url: p.image_url, name: p.name }, 'w-full h-full object-cover object-center')}
+      ${teamLogo({ image_url: p.image_url, name: p.name }, 'w-full h-full object-contain')}
       <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-deep-navy/90 to-transparent px-4 pt-8 pb-2">
         <h3 class="font-body-md text-body-md text-on-surface font-bold m-0 truncate">${p.name || '?'}</h3>
         <p class="font-metadata text-metadata text-on-surface-variant truncate flex items-center gap-1">${teamFlagLine ? `<span class="shrink-0">${teamFlagLine}</span>` : ''}<span class="truncate">${p.current_team?.name || 'Free agent'}</span></p>
