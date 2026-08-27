@@ -432,6 +432,45 @@ async function ensurePlayerGameStats() {
   return rows;
 }
 
+// ── FRAGBITE NEWS ─────────────────────────────────────────────────────────
+async function ensureFragbiteNews() {
+  // Not gated on _pandaScoreUnavailable: the Worker's /news route only
+  // talks to Fragbite's RSS feed, it has nothing to do with PandaScore.
+  const NEWS_KEY       = 'swe_fragbite_news_v1';
+  const NEWS_FETCH_KEY = 'swe_fragbite_news_fetched_v1';
+  const NEWS_STALE_MS  = 15 * 60 * 1000; // matches the Worker's own KV TTL
+
+  let items = cacheGet(NEWS_KEY) || [];
+  const lastFetch = parseInt(localStorage.getItem(NEWS_FETCH_KEY) || '0', 10);
+  const isStale = Date.now() - lastFetch > NEWS_STALE_MS;
+
+  if (isStale || !items.length) {
+    try {
+      const fetched = await pandaFetch('/news', { bypassGuard: true });
+      if (Array.isArray(fetched) && fetched.length) {
+        items = fetched;
+        cacheSet(NEWS_KEY, items);
+      }
+      localStorage.setItem(NEWS_FETCH_KEY, Date.now().toString());
+    } catch(e) {
+      console.warn('[SWE] Failed to load Fragbite news:', e);
+    }
+  }
+  return items;
+}
+
+function timeAgo(dateStr) {
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  if (isNaN(diffMs)) return '';
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 function buildPlayerStatProfiles(rows, periodMonths, players = []) {
   const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - periodMonths);
   const nameToId = {};

@@ -89,7 +89,21 @@ window.addEventListener('DOMContentLoaded', () => {
   const cached = cacheGet('swe_live');
   if (cached) renderMatches(cached.live, cached.upcoming);
   fetchMatches();
+  loadNews();
 });
+
+const NEWS_POLL_MS = 15 * 60 * 1000;
+
+async function loadNews() {
+  try {
+    const items = await ensureFragbiteNews();
+    document.getElementById('sidebar-news').innerHTML = renderNewsFeed(items);
+  } catch(e) {
+    console.warn('[SWE] News render failed:', e);
+  } finally {
+    setTimeout(loadNews, NEWS_POLL_MS);
+  }
+}
 
 async function fetchMatches() {
   try {
@@ -327,24 +341,26 @@ function renderSidebar(sweUpcoming) {
         </div>
       </li>`).join('')
     : `<li class="font-metadata text-metadata text-on-surface-variant">Nothing scheduled.</li>`;
-
-  document.getElementById('sidebar-news').innerHTML = renderNewsFeed();
 }
 
-// Placeholder news feed — swap FAKE_NEWS_ITEMS for a real API response
-// once one is wired up.
-const FAKE_NEWS_ITEMS = [
-  { text: 'Roster change rumors swirling ahead of the next Swedish qualifier.', time: '2h ago' },
-  { text: 'Community voting opens for fan-favorite Swedish player of the month.', time: '6h ago' },
-  { text: 'Analyst desk previews the top Swedish squads heading into playoffs.', time: '1d ago' },
-];
-
-function renderNewsFeed() {
-  return FAKE_NEWS_ITEMS.map(n => `
-    <div class="flex flex-col gap-0.5 pb-3 border-b border-outline-variant/10 last:border-0 last:pb-0">
-      <span class="text-on-surface text-sm">${n.text}</span>
-      <span class="font-label-caps text-label-caps text-on-surface-variant/60">${n.time}</span>
-    </div>`).join('');
+// Fragbite CS2 news — fetched via ensureFragbiteNews() (see shared.js),
+// which pulls from the Worker's /news route. Each card links straight out
+// to the article on fragbite.se, this site doesn't host the article text.
+function renderNewsFeed(items) {
+  if (!items || !items.length) {
+    return `<span class="text-on-surface-variant">No news right now.</span>`;
+  }
+  return items.map(n => `
+    <a href="${n.link}" target="_blank" rel="noopener noreferrer"
+       class="flex gap-3 pb-3 border-b border-outline-variant/10 last:border-0 last:pb-0 group">
+      ${n.image
+        ? `<img src="${n.image}" alt="" loading="lazy" class="w-14 h-14 rounded-lg object-cover shrink-0 bg-surface-container-highest" onerror="this.style.display='none'" />`
+        : `<div class="w-14 h-14 rounded-lg bg-surface-container-highest shrink-0"></div>`}
+      <div class="flex-1 min-w-0">
+        <span class="text-on-surface text-sm font-medium leading-snug group-hover:text-swedish-gold transition-colors line-clamp-2">${n.title}</span>
+        <div class="font-label-caps text-label-caps text-on-surface-variant/60 mt-1">${timeAgo(n.pubDate)} · Fragbite</div>
+      </div>
+    </a>`).join('');
 }
 </script>
 </body>
