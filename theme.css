@@ -104,12 +104,20 @@ body {
 
 .rank-shine { position: relative; overflow: hidden; }
 
-/* Some team logos (MIBR, etc.) are black or very dark with a transparent
-   background, so they disappeared against the site's dark navy/gray card
-   backgrounds. A light backdrop behind every logo fixes dark logos and
-   still reads fine for colored or light ones. */
+/* Team logos vary wildly in color — some are black on transparent, some
+   are white on transparent (see MIBR vs. others). A single flat backdrop
+   can only ever solve one of those at the other's expense (light backdrop
+   hides white logos, dark backdrop hides black logos). A checkerboard
+   pattern with two close-but-distinct neutral tones sidesteps that: every
+   logo, whatever its color, contrasts against at least one of the two
+   squares, so nothing goes invisible. */
 .team-logo-bg {
   background-color: #eef0f3;
+  background-image:
+    linear-gradient(45deg, #c7cbd1 25%, transparent 25%, transparent 75%, #c7cbd1 75%, #c7cbd1),
+    linear-gradient(45deg, #c7cbd1 25%, transparent 25%, transparent 75%, #c7cbd1 75%, #c7cbd1);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
 }
 
 /* Long team names (e.g. "GamerLegion") shrink instead of wrapping. Tiers

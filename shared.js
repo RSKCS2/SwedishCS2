@@ -793,8 +793,14 @@ function playerRating(stat, tierWeight = 0.5) {
 function rankPlayersByRating(players, statMap, tierMap) {
   return (players || []).slice().sort((a, b) => {
     const sa = statMap[a.id], sb = statMap[b.id];
-    const ta = a.current_team ? (tierMap[a.current_team.id] ?? 0.5) : 0.5;
-    const tb = b.current_team ? (tierMap[b.current_team.id] ?? 0.5) : 0.5;
+    // A free agent faces no tiered competition at all, so they get the
+    // same floor weight as a team that never cracked Valve's Top 30 (see
+    // valveRankWeight's fallback) — not the neutral 0.5 fallback used
+    // when a rostered player's team just isn't in the map yet. The old
+    // 0.5 was letting free agents' raw stats outrank players grinding it
+    // out on real bottom-tier teams.
+    const ta = a.current_team ? (tierMap[a.current_team.id] ?? 0.5) : 0.2;
+    const tb = b.current_team ? (tierMap[b.current_team.id] ?? 0.5) : 0.2;
     const ra = playerRating(sa, ta), rb = playerRating(sb, tb);
     if (rb !== ra) return rb - ra;
     return (a.name || '').localeCompare(b.name || '');
