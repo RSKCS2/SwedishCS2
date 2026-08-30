@@ -128,6 +128,20 @@ async function fetchMatches() {
   try {
     await ensureSwedishData();
 
+    const historyP = ensureMatchHistory().catch(e => { console.warn('[SWE] History unavailable for H2H:', e); return []; });
+    const statsP   = ensurePlayerGameStats().catch(e => { console.warn('[SWE] Player stats unavailable for sidebar:', e); return []; });
+
+    // "Top Players This Month" only needs history + player stats, not the
+    // live running/upcoming match fetch below. Render it as soon as those
+    // two resolve (near-instant once cached) instead of waiting on the
+    // always-live match fetch, which is what made the sidebar feel slow
+    // even when the roster/history data itself was already cached.
+    Promise.all([historyP, statsP]).then(([h, s]) => {
+      historyMatches = h || [];
+      playerStatRows = s || [];
+      renderSidebar();
+    });
+
     const [runningList, upcomingList, history, statRows] = await Promise.all([
       pandaFetch('/csgo/matches/running?per_page=50&include=opponents,results,games,pick_bans'),
       pandaFetch('/csgo/matches/upcoming?per_page=30&sort=begin_at&include=opponents'),
@@ -135,10 +149,10 @@ async function fetchMatches() {
       // PandaScore hit) — used purely for the head-to-head line on upcoming
       // cards and for the "Top Players" sidebar's competition-tier
       // weighting. A failure here shouldn't break the live scoreboard.
-      ensureMatchHistory().catch(e => { console.warn('[SWE] History unavailable for H2H:', e); return []; }),
+      historyP,
       // Also KV-backed, no live PandaScore hit — feeds real K/D/ADR into
       // the "Top Players" sidebar instead of the old placeholder numbers.
-      ensurePlayerGameStats().catch(e => { console.warn('[SWE] Player stats unavailable for sidebar:', e); return []; }),
+      statsP,
     ]);
     historyMatches = history || [];
     playerStatRows = statRows || [];
@@ -181,7 +195,7 @@ async function fetchMatches() {
       renderMatches(enriched, sweUpcoming);
     }
 
-    renderSidebar(sweUpcoming);
+    renderSidebar();
 
     const interval = enriched.length > 0 ? LIVE_TTL : sweUpcoming.length > 0 ? UPCOMING_TTL : 15 * 60 * 1000;
     clearTimeout(pollTimer);
@@ -329,7 +343,7 @@ function renderUpcomingCard(match) {
 // competition-tier score (rankPlayersByRating, see shared.js), not just
 // raw stats, so a player who only plays D-tier matches can't land at #1
 // over someone performing well against real competition.
-function renderSidebar(sweUpcoming) {
+function renderSidebar() {
   const { start, end } = computePeriodRange('month');
   const periodMatches = historyMatches.filter(m => {
     const d = new Date(m.begin_at);

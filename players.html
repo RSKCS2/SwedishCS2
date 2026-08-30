@@ -299,9 +299,13 @@ function renderPlayerCard(p, position) {
   if (stats.hs_pct != null) statCols.push({ label: 'HS%', value: stats.hs_pct + '%' });
   if (stats.multikills) statCols.push({ label: 'Multi-K', value: stats.multikills });
 
+  const medal = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : null;
+  const cardMedalCls  = medal ? `rank-${medal} rank-shine` : '';
+  const badgeMedalCls = medal ? `rank-badge-${medal}` : 'bg-swedish-gold text-deep-navy';
+
   return `
-  <div class="bg-deep-navy rounded-xl border border-outline-variant/30 hover:border-outline-variant/60 transition-colors overflow-hidden flex flex-col relative">
-    ${rank ? `<div class="absolute top-2 left-2 z-10 w-8 h-8 rounded-lg bg-swedish-gold text-deep-navy font-black flex items-center justify-center text-xs">#${rank}</div>` : ''}
+  <div class="bg-deep-navy rounded-xl border border-outline-variant/30 hover:border-outline-variant/60 transition-colors overflow-hidden flex flex-col relative ${cardMedalCls}">
+    ${rank ? `<div class="absolute top-2 left-2 z-10 w-8 h-8 rounded-lg ${badgeMedalCls} font-black flex items-center justify-center text-xs">#${rank}</div>` : ''}
     <div class="h-48 bg-surface-container-high relative overflow-hidden">
       ${teamLogo({ image_url: p.image_url, name: p.name }, 'w-full h-full object-contain')}
       <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-deep-navy/90 to-transparent px-4 pt-8 pb-2">

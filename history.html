@@ -335,7 +335,12 @@ function renderResults() {
       <span class="font-metadata text-metadata text-on-surface-variant">Showing <strong class="text-on-surface">${start + 1}–${Math.min(end, matches.length)}</strong> of <strong class="text-on-surface">${matches.length}</strong> matches</span>
       <div class="flex items-center gap-2">
         <button class="bg-primary-container text-on-primary-container px-4 py-2 rounded font-bold hover:opacity-90 transition-opacity text-sm uppercase disabled:opacity-40 disabled:cursor-not-allowed" onclick="goPrevPage()" ${currentPage === 1 ? 'disabled' : ''}>Prev</button>
-        <span class="font-metadata text-metadata text-on-surface-variant px-2">Page ${currentPage} / ${totalPages}</span>
+        <span class="font-metadata text-metadata text-on-surface-variant px-1">Page</span>
+        <input type="number" min="1" max="${totalPages}" value="${currentPage}" id="page-jump-input"
+          class="w-16 bg-surface-container-high border border-outline-variant/30 text-on-surface text-sm rounded-md py-1.5 px-2 text-center focus:outline-none focus:border-swedish-gold"
+          onkeydown="if(event.key==='Enter'){goToPage(this.value, ${totalPages});}" />
+        <span class="font-metadata text-metadata text-on-surface-variant px-1">/ ${totalPages}</span>
+        <button class="bg-surface-container-high text-on-surface px-3 py-2 rounded font-bold hover:opacity-90 transition-opacity text-sm uppercase border border-outline-variant/30" onclick="goToPage(document.getElementById('page-jump-input').value, ${totalPages})">Go</button>
         <button class="bg-primary-container text-on-primary-container px-4 py-2 rounded font-bold hover:opacity-90 transition-opacity text-sm uppercase disabled:opacity-40 disabled:cursor-not-allowed" onclick="goNextPage(${totalPages})" ${currentPage >= totalPages ? 'disabled' : ''}>Next</button>
       </div>
     </div>`;
@@ -348,6 +353,13 @@ function goPrevPage() {
 }
 function goNextPage(totalPages) {
   if (currentPage < totalPages) { currentPage++; renderResults(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+}
+function goToPage(value, totalPages) {
+  const n = parseInt(value, 10);
+  if (!Number.isFinite(n)) return;
+  currentPage = Math.min(Math.max(n, 1), totalPages);
+  renderResults();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function renderCard(match) {

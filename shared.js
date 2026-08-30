@@ -204,8 +204,9 @@ async function ensureSwedishData() {
         _swePlayers.push(p);
         const tid = p.current_team?.id;
         if (!tid) return;
-        if (!_sweTeamData[tid]) _sweTeamData[tid] = { count: 0, isFull: false, name: p.current_team?.name };
+        if (!_sweTeamData[tid]) _sweTeamData[tid] = { count: 0, isFull: false, name: p.current_team?.name, players: [] };
         _sweTeamData[tid].count++;
+        _sweTeamData[tid].players.push(p.name);
       });
       if (players.length < 100) break;
       page++;
