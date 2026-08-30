@@ -729,7 +729,7 @@ function normPlayerNameFE(name) {
 // down, from 0 (ignored entirely — pure K/D + ADR + sample size) to 1
 // (full effect). Turn this down to let raw stats matter more, up to weight
 // Valve's rank more heavily.
-const TIER_INFLUENCE = 0.35;
+const TIER_INFLUENCE = 0.8;
 
 // How many maps it takes for the sample-size discount to reach full
 // confidence (1.0) in a player's stats. A player with fewer maps than
