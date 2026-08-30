@@ -10,32 +10,11 @@ A fan-run, non-commercial tracker for Swedish Counter-Strike 2 teams, players, a
 
 ## Features
 
-- **Live Scores** — running and upcoming matches for Swedish teams
-- **Results** — match history with W/L record and recent form
-- **Teams** — Swedish rosters ranked against Valve's Regional Standings (Europe / Americas / Asia) and World rank, with medal styling for the top 3
-- **Players** — individual stats (K/D, ADR, maps played, HS%, multi-kills where available) and a Top 3 podium
-- **News** — latest CS2 headlines pulled from Fragbite
-- A dark, gold-and-navy theme with a bit of Swedish flag styling throughout
-
-## Tech stack
-
-**Frontend** — plain HTML + vanilla JS, no build step or framework:
-- `index.html`, `history.html`, `teams.html`, `players.html`, `terms.html`, `privacy.html`
-- `shared.js` — all fetching/rendering logic shared across pages
-- `theme.css` + `tailwind-config.js` — design tokens, loaded via the Tailwind CDN build
-
-**Backend** — a Cloudflare Worker that does all the heavy lifting so the frontend only ever talks to one small, cached API:
-- Scheduled (cron) handler pulls match/roster/stat data from **PandaScore** (primary) and **GRID** (fallback + supplemental stats), merges it, and writes it to **Cloudflare KV**
-- **Cloudflare Turnstile** gates the API behind a short-lived session token, so only real browsers on the site's own origin can hit it
-- Careful KV write-budgeting to stay under Cloudflare's free-tier caps (1,000 writes/day) — heavy tasks (team metadata, history rotation, player-stats processing) are spread across separate tick offsets instead of running every 3 minutes
-
-## How it works
-
-1. A cron trigger fires the Worker's `scheduled()` handler every 3 minutes.
-2. Every tick refreshes live scores and upcoming matches (PandaScore, falling back to GRID by team name/nationality if PandaScore is unavailable).
-3. Every 8th tick ("metadata tick") also refreshes team rosters and rotates through one Swedish team's match history.
-4. A separate, offset "stats tick" processes a queue of finished games to pull per-player stats, so it doesn't compete with the metadata tick for the same request budget.
-5. Everything gets cached in KV; the frontend just reads the cache through a handful of `/csgo/*` endpoints, so page loads never wait on PandaScore/GRID directly.
+- Live scores and upcoming matches for Swedish teams
+- Match history with W/L record
+- Team rankings, regional and world
+- Player stats
+- Latest CS2 news
 
 ## Project structure
 
@@ -61,20 +40,6 @@ A fan-run, non-commercial tracker for Swedish Counter-Strike 2 teams, players, a
 - [Fragbite](https://fragbite.se/) — CS news via RSS
 
 Match data may occasionally be delayed or incomplete — nothing on this site should be used for betting or wagering decisions.
-
-## Local development
-
-**Frontend** — no build step needed. Serve the folder with any static server, e.g.:
-```bash
-npx serve .
-```
-If you're pointing at your own Worker deployment instead of the production API, update the base URL used in `shared.js`.
-
-**Backend** — deployed with [Wrangler](https://developers.cloudflare.com/workers/wrangler/):
-1. Create a KV namespace and bind it as `MATCH_DATA` in `wrangler.toml`
-2. Set secrets: `PANDASCORE_TOKEN`, `GRID_TOKEN`, `WORKER_SECRET`, `TURNSTILE_SECRET`
-3. Set the cron trigger to `*/3 * * * *`
-4. `wrangler deploy`
 
 ## Contributing
 
