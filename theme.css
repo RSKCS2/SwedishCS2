@@ -135,6 +135,20 @@ body {
 .team-heading-shrink-1 { font-size: 1.375rem; line-height: 1.75rem; }
 .team-heading-shrink-2 { font-size: 1.125rem; line-height: 1.5rem; }
 
+/* Player-card team line sits over a photo of unpredictable brightness
+   (see REZ), so it needs guaranteed contrast rather than relying on the
+   card's own gradient. tailwind-built.css is a purged build with no
+   bg-black/* or backdrop-blur-sm utilities compiled in (they weren't used
+   anywhere in the original markup), so this is hand-written rather than
+   Tailwind classes — a solid dark chip plus its own text-shadow as a
+   second line of defense. */
+.player-meta-badge {
+  display: inline-block;
+  max-width: 100%;
+  background: rgba(0, 0, 0, 0.68);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
 /* tailwind-built.css is a precompiled, purged build — it only contains
    the utility classes actually written in the markup at build time, so
    a class like cursor-help that isn't used anywhere else silently does

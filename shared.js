@@ -330,6 +330,7 @@ function regionForCountryCode(code) {
 }
 
 const VALVE_REGION_LABELS = { europe: 'Europe', americas: 'Americas', asia: 'Asia' };
+const VALVE_REGION_ABBR   = { europe: 'EU', americas: 'AM', asia: 'AS' };
 
 // Resolves which Valve regional-standings list a team should be looked up
 // in. Majority-Swedish rosters (the site's focus) and mixed-European
