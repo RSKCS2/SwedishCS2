@@ -710,7 +710,7 @@ function normPlayerNameFE(name) {
 // down, from 0 (ignored entirely — pure K/D + ADR + sample size) to 1
 // (full effect). Turn this down to let raw stats matter more, up to weight
 // Valve's rank more heavily.
-const TIER_INFLUENCE = 0.35;
+const TIER_INFLUENCE = 0.15;
 
 // Valve's published lists run to ~30 ranked teams. #1 gets full weight,
 // rank 30 gets a low-but-nonzero weight, and a team absent from the list
