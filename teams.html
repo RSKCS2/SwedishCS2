@@ -208,8 +208,8 @@ function renderTeamCard(team) {
   // team's roster actually belongs to.
   const rankBadgeValue = regionRank ?? worldRank;
   const rankBadgeTitle = regionRank
-    ? `${regionLabel} #${regionRank}${worldRank ? ` · World #${worldRank}` : ''}`
-    : (worldRank ? `World #${worldRank}` : '');
+    ? `${team.name} — ${regionLabel} #${regionRank}${worldRank ? ` · World #${worldRank}` : ''}`
+    : (worldRank ? `${team.name} — World #${worldRank}` : '');
 
   const medal = sweRank === 1 ? 'gold' : sweRank === 2 ? 'silver' : sweRank === 3 ? 'bronze' : null;
   const cardMedalCls  = medal ? `rank-${medal} rank-shine` : '';
@@ -239,18 +239,22 @@ function renderTeamCard(team) {
   return `
   <article class="bg-deep-navy border border-outline-variant/20 rounded-xl p-4 flex flex-col gap-4 glow-card transition-all duration-300 relative overflow-hidden group ${cardMedalCls}">
     <div class="absolute inset-0 bg-gradient-to-br from-swedish-gold/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-    <div class="flex justify-between items-start z-10">
-      <div class="flex items-center gap-4 min-w-0">
-        ${sweRank ? `<div class="shrink-0 w-9 h-9 rounded-lg ${badgeMedalCls} font-black flex items-center justify-center text-sm">#${sweRank}</div>` : ''}
-        <div class="w-20 h-20 team-logo-bg rounded-lg flex items-center justify-center border border-outline-variant/30 p-2 shrink-0">
-          ${teamLogo({ image_url: team.logo, name: team.name }, 'max-w-full max-h-full object-contain')}
-        </div>
-        <div class="flex-1 min-w-0">
-          <h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-bold break-words ${teamNameSizeClass(team.name, 'heading')}">${team.name}</h2>
-          <p class="font-metadata text-metadata text-on-surface-variant flex items-center gap-1">${nationalityLine}</p>
-          <div class="flex gap-2 mt-1 flex-wrap">
-            ${rankBadgeValue ? `<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container-highest/40 px-1.5 py-0.5 rounded cursor-help" title="${rankBadgeTitle}">#${rankBadgeValue}</span>` : ''}
-          </div>
+
+    <!-- Logo hero: no backdrop box — team-logo-glow outlines the logo's
+         own silhouette so it reads clearly on the dark card whatever its
+         own fill color is, and it's free to run large instead of being
+         squeezed into a small square. -->
+    <div class="relative z-10 h-28 flex items-center justify-center">
+      ${sweRank ? `<div class="absolute top-0 left-0 w-9 h-9 rounded-lg ${badgeMedalCls} font-black flex items-center justify-center text-sm z-20">#${sweRank}</div>` : ''}
+      ${teamLogo({ image_url: team.logo, name: team.name }, 'max-h-24 max-w-[75%] object-contain team-logo-glow')}
+    </div>
+
+    <div class="flex justify-between items-start z-10 gap-3">
+      <div class="flex-1 min-w-0">
+        <h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-bold break-words ${teamNameSizeClass(team.name, 'heading')}">${team.name}</h2>
+        <p class="font-metadata text-metadata text-on-surface-variant flex items-center gap-1">${nationalityLine}</p>
+        <div class="flex gap-2 mt-1 flex-wrap">
+          ${rankBadgeValue ? `<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container-highest/40 px-1.5 py-0.5 rounded cursor-help" title="${rankBadgeTitle}">#${rankBadgeValue}</span>` : ''}
         </div>
       </div>
       ${squadLabel ? `<div class="text-right shrink-0"><span class="font-label-caps text-label-caps text-swedish-gold block">Squad</span><span class="font-bold text-sm text-on-surface">${squadLabel}</span>${sweSquadHtml}</div>` : ''}

@@ -105,15 +105,21 @@ body {
 .rank-shine { position: relative; overflow: hidden; }
 
 /* Team logos vary wildly in color — some are black on transparent, some
-   are white on transparent (see MIBR vs. others). A single flat backdrop
-   can only ever solve one of those at the other's expense (light backdrop
-   hides white logos, dark backdrop hides black logos). A diagonal
-   light/dark split sidesteps that without looking like a transparency
-   checkerboard: since a logo is centered and spans most of the box, it
-   crosses both halves, so it contrasts against at least one of them no
-   matter its own color. */
-.team-logo-bg {
-  background: linear-gradient(135deg, #eef0f3 0%, #eef0f3 44%, #262a30 56%, #262a30 100%);
+   are white on transparent (see MIBR vs. others). Instead of putting a
+   flat or boxed backdrop behind the logo (which only ever solves one
+   color at the other's expense, or looks like a rendering artifact),
+   this outlines the logo's own silhouette with a soft light rim. Because
+   the outline traces the image's alpha edge rather than filling a shape,
+   it reads as a subtle glow around ANY logo color and needs no
+   background box at all — the logo can sit straight on the card, at
+   whatever size looks right. */
+.team-logo-glow {
+  filter:
+    drop-shadow(1px 0 0 rgba(255,255,255,0.85))
+    drop-shadow(-1px 0 0 rgba(255,255,255,0.85))
+    drop-shadow(0 1px 0 rgba(255,255,255,0.85))
+    drop-shadow(0 -1px 0 rgba(255,255,255,0.85))
+    drop-shadow(0 0 10px rgba(255,255,255,0.25));
 }
 
 /* Long team names (e.g. "GamerLegion") shrink instead of wrapping. Tiers

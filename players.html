@@ -300,8 +300,8 @@ function renderPlayerCard(p, position) {
     const regionRank = findValveRank(regionCache, p.current_team.name)?.rank ?? null;
     rankBadgeValue = regionRank ?? worldRank;
     rankBadgeTitle = regionRank
-      ? `${VALVE_REGION_LABELS[teamRegion]} #${regionRank}${worldRank ? ` · World #${worldRank}` : ''}`
-      : (worldRank ? `World #${worldRank}` : '');
+      ? `${p.current_team.name} — ${VALVE_REGION_LABELS[teamRegion]} #${regionRank}${worldRank ? ` · World #${worldRank}` : ''}`
+      : (worldRank ? `${p.current_team.name} — World #${worldRank}` : '');
   }
   const stats = playerStatMap[p.id] || {};
   const kd   = stats.kd_ratio != null ? stats.kd_ratio : '—';
@@ -330,7 +330,7 @@ function renderPlayerCard(p, position) {
       ${teamLogo({ image_url: p.image_url, name: p.name }, 'w-full h-full object-contain')}
       <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-deep-navy/90 to-transparent px-4 pt-8 pb-2">
         <h3 class="font-body-md text-body-md text-on-surface font-bold m-0 truncate">${p.name || '?'}</h3>
-        <p class="inline-flex max-w-full items-center gap-1 bg-deep-navy/70 backdrop-blur-sm px-1.5 py-0.5 rounded font-metadata text-metadata text-on-surface-variant truncate">${teamFlagLine ? `<span class="shrink-0">${teamFlagLine}</span>` : ''}<span class="truncate">${p.current_team?.name || 'Free agent'}</span>${rankBadgeValue ? `<span class="shrink-0 font-label-caps text-label-caps text-on-surface-variant/70 cursor-help" title="${rankBadgeTitle}">#${rankBadgeValue}</span>` : ''}</p>
+        <p class="inline-block max-w-full bg-black/60 backdrop-blur-sm px-2 py-1 rounded-md font-metadata text-metadata text-on-surface-variant truncate">${teamFlagLine ? teamFlagLine + ' ' : ''}${p.current_team?.name || 'Free agent'}${rankBadgeValue ? ` <span class="text-on-surface-variant/70 cursor-help" title="${rankBadgeTitle}">#${rankBadgeValue}</span>` : ''}</p>
       </div>
     </div>
     <div class="p-4 flex flex-col gap-3 flex-1">
