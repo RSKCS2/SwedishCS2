@@ -47,7 +47,7 @@ If you'd rather reach out directly first, the contact address already listed on 
 
 ## License
 
-No license has been chosen yet — until one is added, all rights are reserved by default. If you want outside contributions, adding a permissive license (e.g. MIT) is worth doing early, since it tells contributors up front what they're agreeing to.
+PolyForm Noncommercial 1.0.0 — you're free to use, fork, modify, and contribute to this code for any noncommercial purpose. Using it (or a derivative of it) to make money isn't permitted without the licensor's separate agreement.
 
 ## Disclaimer
 
