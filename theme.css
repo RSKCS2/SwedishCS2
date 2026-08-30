@@ -104,24 +104,6 @@ body {
 
 .rank-shine { position: relative; overflow: hidden; }
 
-/* Team logos vary wildly in color — some are black on transparent, some
-   are white on transparent (see MIBR vs. others). Instead of putting a
-   flat or boxed backdrop behind the logo (which only ever solves one
-   color at the other's expense, or looks like a rendering artifact),
-   this outlines the logo's own silhouette with a soft light rim. Because
-   the outline traces the image's alpha edge rather than filling a shape,
-   it reads as a subtle glow around ANY logo color and needs no
-   background box at all — the logo can sit straight on the card, at
-   whatever size looks right. */
-.team-logo-glow {
-  filter:
-    drop-shadow(1px 0 0 rgba(255,255,255,0.85))
-    drop-shadow(-1px 0 0 rgba(255,255,255,0.85))
-    drop-shadow(0 1px 0 rgba(255,255,255,0.85))
-    drop-shadow(0 -1px 0 rgba(255,255,255,0.85))
-    drop-shadow(0 0 10px rgba(255,255,255,0.25));
-}
-
 /* Long team names (e.g. "GamerLegion") shrink instead of wrapping. Tiers
    are picked by JS (see teamNameSizeClass in shared.js) from name length.
    The card variants only touch the sm+ size, since the mobile size is
