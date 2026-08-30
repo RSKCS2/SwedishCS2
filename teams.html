@@ -7,8 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@100..900&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<script src="tailwind-config.js"></script>
+<link rel="stylesheet" href="tailwind-built.css" />
 <link rel="stylesheet" href="theme.css" />
 </head>
 <body class="bg-surface-blue text-on-surface font-body-md min-h-screen flex flex-col">
@@ -224,18 +223,18 @@ function renderTeamCard(team) {
         <div class="w-20 h-20 bg-surface rounded-lg flex items-center justify-center border border-outline-variant/30 p-2 shrink-0">
           ${teamLogo({ image_url: team.logo, name: team.name }, 'max-w-full max-h-full object-contain')}
         </div>
-        <div class="min-w-0">
-          <h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-bold truncate">${team.name}</h2>
+        <div class="flex-1 min-w-0">
+          <h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-bold break-words">${team.name}</h2>
           <p class="font-metadata text-metadata text-on-surface-variant flex items-center gap-1">${nationalityLine}</p>
           <div class="flex gap-2 mt-1 flex-wrap">
-            ${worldRank ? `<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container-highest px-1.5 py-0.5 rounded">WORLD #${worldRank}</span>` : ''}
-            ${euRank ? `<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container-highest px-1.5 py-0.5 rounded">EU #${euRank}</span>` : ''}
+            ${worldRank ? `<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container-highest/40 px-1.5 py-0.5 rounded">WORLD #${worldRank}</span>` : ''}
+            ${euRank ? `<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container-highest/40 px-1.5 py-0.5 rounded">EU #${euRank}</span>` : ''}
           </div>
         </div>
       </div>
       ${squadLabel ? `<div class="text-right shrink-0"><span class="font-label-caps text-label-caps text-swedish-gold block">Squad</span><span class="font-bold text-sm text-on-surface">${squadLabel}</span>${sweSquadHtml}</div>` : ''}
     </div>
-    <div class="bg-surface-container-highest rounded-lg p-3 z-10 mt-2 border border-outline-variant/10">
+    <div class="bg-gradient-to-b from-surface-container-highest/50 via-surface-container-highest/25 to-transparent rounded-lg p-3 z-10 mt-2 border border-outline-variant/10">
       <span class="font-label-caps text-label-caps text-on-surface-variant block mb-2">Recent Matches</span>
       <div class="flex flex-col gap-2">${recentHtml}</div>
       <div class="mt-3 pt-3 border-t border-outline-variant/10 flex justify-between items-center">

@@ -360,6 +360,43 @@ function teamCountryLine(teamId) {
   return '🌐 International';
 }
 
+// The trim-on-quota-failure fix (see cacheSet above) stopped history
+// growth from silently freezing, but it only treats the symptom — it
+// didn't explain why "All Time" kept landing on such a suspiciously round
+// match/page count (1600, then 1300). The real cause: every match was
+// being persisted as PandaScore's full raw payload — streams, detailed
+// per-round stats, raw videogame metadata, full nested serie/league
+// objects, none of which any page here actually reads — so the
+// localStorage quota was being spent almost entirely on bytes nothing
+// uses, and the exact match count that fit kept drifting down as new,
+// slightly heavier matches got merged in. This keeps only the fields
+// actually read anywhere in the site (grep for every `m.<field>` /
+// `match.<field>` access if you add a new field to a page and it goes
+// missing from history — it needs to be added here too), so several
+// times more real match history fits in the same quota.
+function compactMatchForCache(m) {
+  const shrinkOpponent = (o) => o?.opponent ? {
+    opponent: {
+      id: o.opponent.id,
+      name: o.opponent.name,
+      image_url: o.opponent.image_url || null,
+      location: o.opponent.location || null,
+    },
+  } : o;
+  return {
+    id: m.id,
+    begin_at: m.begin_at,
+    name: m.name || null,
+    winner: m.winner ? { id: m.winner.id } : null,
+    opponents: (m.opponents || []).map(shrinkOpponent),
+    results: (m.results || []).map(r => ({ team_id: r.team_id, score: r.score })),
+    games: (m.games || []).map(g => ({ winner: g.winner ? { id: g.winner.id } : null })),
+    tournament: m.tournament ? { name: m.tournament.name, tier: m.tournament.tier || null, prizepool: m.tournament.prizepool || null } : null,
+    league: m.league ? { name: m.league.name } : null,
+    serie: m.serie ? { name: m.serie.name, full_name: m.serie.full_name } : null,
+  };
+}
+
 // ── TEAM MATCH HISTORY ──────────────────────────────────────────────────────
 async function ensureMatchHistory() {
   // Not gated on _pandaScoreUnavailable: the Worker's /csgo/matches/past
@@ -408,7 +445,7 @@ async function ensureMatchHistory() {
       const relevant = pastPage.filter(m => m.opponents?.length === 2 && (sweInfo(m.opponents[0]?.opponent) || sweInfo(m.opponents[1]?.opponent)));
       if (relevant.length) {
         const seen = new Set(matches.map(m => m.id));
-        relevant.forEach(m => { if (!seen.has(m.id)) { matches.push(m); seen.add(m.id); } });
+        relevant.forEach(m => { if (!seen.has(m.id)) { matches.push(compactMatchForCache(m)); seen.add(m.id); } });
         cacheSet(HISTORY_KEY, matches);
       }
       if (pastPage.length < 100) break;
@@ -443,7 +480,15 @@ function buildTeamProfiles(matches, cutoff = monthsAgo(3), end = null) {
       const won = m.winner?.id === self.id;
       p.matches.push({ oppName: opp?.name || 'TBD', selfMaps, oppMaps, won, date: m.begin_at });
       const d = new Date(m.begin_at);
-      if (d >= cutoff && (!end || d <= end)) { if (won) p.wins3m++; else p.losses3m++; }
+      // Only count a match toward the 3-month record once it actually has
+      // a recorded winner. Previously any match without one (still being
+      // scored, a walkover with no `winner` object, etc.) fell into the
+      // `else` branch here and was silently counted as a LOSS — that's
+      // what made a team's "Past 3 Months" total not match what its own
+      // "Recent Matches" list showed just above it.
+      if (m.winner && d >= cutoff && (!end || d <= end)) {
+        if (won) p.wins3m++; else p.losses3m++;
+      }
     });
   });
 
@@ -649,46 +694,47 @@ function normPlayerNameFE(name) {
 // of competition their team has actually been facing into one comparable
 // score, used to rank both the Players page and the front page's "Top
 // Players" list.
-const TIER_ORDER = { d: 1, c: 2, b: 3, a: 4, s: 5 };
+// ── PLAYER RATING (K/D + ADR, discounted by sample size and Valve's own
+// Regional Standings rank) ──────────────────────────────────────────────
+// This used to weight players by the `tournament.tier` field on their
+// team's matches (S/A/B/C/D, from PandaScore). That field is frequently
+// missing or stale on PandaScore's side, so most teams silently fell back
+// to the neutral 0.5 default regardless of who they'd actually played —
+// which is what made the ranking feel broken. Valve's own Regional
+// Standings (github.com/ValveSoftware/counter-strike_regional_standings)
+// is already pulled in elsewhere on this site for the Teams page's
+// WORLD/EU rank badges (see fetchValveStandings/findValveRank below) —
+// reuse that same authoritative list here instead.
+//
+// How much a team's Valve rank is allowed to drag a player's rating up or
+// down, from 0 (ignored entirely — pure K/D + ADR + sample size) to 1
+// (full effect). Turn this down to let raw stats matter more, up to weight
+// Valve's rank more heavily.
+const TIER_INFLUENCE = 0.35;
 
-// How much a team's competition tier is allowed to drag a player's rating
-// up or down, from 0 (tier ignored entirely — pure K/D + ADR + sample
-// size) to 1 (full effect, tier weight applied directly as before). This
-// is the one knob to turn: lower it to let raw stats matter more, raise
-// it to weight the competition tier more heavily.
-const TIER_INFLUENCE = 0.20;
-
-// A team's tier weight is the *best* (highest) tier tournament they're
-// seen competing in within the given match list — one S-tier appearance
-// still says more about a team's level than a stack of D-tier bracket
-// wins, so "best seen" avoids punishing a strong team for also grinding
-// lower-tier qualifiers alongside their real events.
-function teamTierWeight(matches, teamId) {
-  if (!teamId) return 0.5;
-  let best = 0;
-  (matches || []).forEach(m => {
-    const t1 = m.opponents?.[0]?.opponent?.id;
-    const t2 = m.opponents?.[1]?.opponent?.id;
-    if (t1 !== teamId && t2 !== teamId) return;
-    const tier = TIER_ORDER[String(m.tournament?.tier || '').toLowerCase()];
-    if (tier && tier > best) best = tier;
-  });
-  // No tiered matches found for this team in the window: assume the
-  // middle of the scale rather than punishing (0) or rewarding (max) an
-  // absence of data.
-  return best ? best / 5 : 0.5;
+// Valve's published lists run to ~30 ranked teams. #1 gets full weight,
+// rank 30 gets a low-but-nonzero weight, and a team absent from the list
+// entirely (never cracked the Top 30) gets the weakest weight, similar to
+// the old "D-tier" floor.
+const VALVE_RANK_FLOOR = 30;
+function valveRankWeight(rank) {
+  if (!rank) return 0.2;
+  const clamped = Math.min(rank, VALVE_RANK_FLOOR);
+  return 1 - (clamped - 1) / (VALVE_RANK_FLOOR - 1) * 0.8; // rank 1 → 1.0, rank 30 → 0.2
 }
 
-function buildTeamTierMap(matches) {
-  const teamIds = new Set();
-  (matches || []).forEach(m => {
-    const t1 = m.opponents?.[0]?.opponent?.id;
-    const t2 = m.opponents?.[1]?.opponent?.id;
-    if (t1) teamIds.add(t1);
-    if (t2) teamIds.add(t2);
-  });
+// Builds { teamId: weight } from a list of {id, name} teams (e.g. players'
+// current_team) against an already-fetched Valve standings list. Unlike
+// the old tier map this has nothing to do with any particular match
+// window — Valve's standings are a single global snapshot — so callers no
+// longer need match history just to weight players.
+function buildValveTierMap(teamList, valveGlobal) {
   const map = {};
-  teamIds.forEach(id => { map[id] = teamTierWeight(matches, id); });
+  (teamList || []).forEach(t => {
+    if (!t?.id || map[t.id] !== undefined) return;
+    const rank = findValveRank(valveGlobal, t.name)?.rank ?? null;
+    map[t.id] = valveRankWeight(rank);
+  });
   return map;
 }
 
