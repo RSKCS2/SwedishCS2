@@ -656,7 +656,7 @@ const TIER_ORDER = { d: 1, c: 2, b: 3, a: 4, s: 5 };
 // size) to 1 (full effect, tier weight applied directly as before). This
 // is the one knob to turn: lower it to let raw stats matter more, raise
 // it to weight the competition tier more heavily.
-const TIER_INFLUENCE = 0.35;
+const TIER_INFLUENCE = 0.20;
 
 // A team's tier weight is the *best* (highest) tier tournament they're
 // seen competing in within the given match list — one S-tier appearance
