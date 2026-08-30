@@ -405,8 +405,8 @@ function renderCard(match) {
       <div class="flex items-center justify-center gap-2 sm:gap-4 md:gap-8 flex-1 md:w-2/4 min-w-0">
         <div class="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 justify-center sm:justify-end flex-1 min-w-0">
           ${sweCountBadge(t1, 'hidden sm:inline-flex sm:order-1')}
-          ${teamLogo(t1, 'order-1 sm:order-3 w-8 h-8 sm:w-10 sm:h-10 rounded-lg object-contain bg-surface-variant p-1 shrink-0')}
-          <span class="order-2 font-bold text-xs sm:text-lg text-on-surface text-center sm:text-right break-words wrap-balance leading-tight${t1swe ? ' text-swedish-gold' : ''}">${t1?.name || 'TBD'}</span>
+          ${teamLogo(t1, 'order-1 sm:order-3 w-8 h-8 sm:w-10 sm:h-10 rounded-lg object-contain team-logo-bg p-1 shrink-0')}
+          <span class="order-2 font-bold text-xs sm:text-lg text-on-surface text-center sm:text-right break-words leading-tight ${teamNameSizeClass(t1?.name)}${t1swe ? ' text-swedish-gold' : ''}">${t1?.name || 'TBD'}</span>
         </div>
         <div class="font-match-score text-match-score flex items-center gap-2 shrink-0">
           <span class="${t1ScoreCls}">${t1Maps}</span>
@@ -414,8 +414,8 @@ function renderCard(match) {
           <span class="${t2ScoreCls}">${t2Maps}</span>
         </div>
         <div class="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 justify-center sm:justify-start flex-1 min-w-0">
-          ${teamLogo(t2, 'order-1 w-8 h-8 sm:w-10 sm:h-10 rounded-lg object-contain bg-surface-variant p-1 shrink-0')}
-          <span class="order-2 font-bold text-xs sm:text-lg text-on-surface text-center sm:text-left break-words wrap-balance leading-tight${t2swe ? ' text-swedish-gold' : ''}">${t2?.name || 'TBD'}</span>
+          ${teamLogo(t2, 'order-1 w-8 h-8 sm:w-10 sm:h-10 rounded-lg object-contain team-logo-bg p-1 shrink-0')}
+          <span class="order-2 font-bold text-xs sm:text-lg text-on-surface text-center sm:text-left break-words leading-tight ${teamNameSizeClass(t2?.name)}${t2swe ? ' text-swedish-gold' : ''}">${t2?.name || 'TBD'}</span>
           ${sweCountBadge(t2, 'hidden sm:inline-flex')}
         </div>
       </div>

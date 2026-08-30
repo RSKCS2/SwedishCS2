@@ -104,16 +104,26 @@ body {
 
 .rank-shine { position: relative; overflow: hidden; }
 
-/* Long team names (e.g. "GamerLegion") in narrow flex columns still need
-   to wrap when they don't fit, but Tailwind's break-words alone splits
-   the word wherever it runs out of room with no hyphen, so it reads like
-   two separate words ("GamerLeg" / "ion"). Adding hyphens here keeps the
-   forced break but makes it look intentional ("Gamer-" / "legion"). */
-.wrap-balance {
-  overflow-wrap: break-word;
-  word-break: normal;
-  hyphens: auto;
+/* Some team logos (MIBR, etc.) are black or very dark with a transparent
+   background, so they disappeared against the site's dark navy/gray card
+   backgrounds. A light backdrop behind every logo fixes dark logos and
+   still reads fine for colored or light ones. */
+.team-logo-bg {
+  background-color: #eef0f3;
 }
+
+/* Long team names (e.g. "GamerLegion") shrink instead of wrapping. Tiers
+   are picked by JS (see teamNameSizeClass in shared.js) from name length.
+   The card variants only touch the sm+ size, since the mobile size is
+   already the smallest step (text-xs) and rarely needs help. The heading
+   variant (teams.html) applies at all sizes, since that heading isn't
+   responsive to begin with. */
+@media (min-width: 640px) {
+  .team-name-shrink-1 { font-size: 0.95rem; line-height: 1.25rem; }
+  .team-name-shrink-2 { font-size: 0.8rem; line-height: 1.05rem; }
+}
+.team-heading-shrink-1 { font-size: 1.375rem; line-height: 1.75rem; }
+.team-heading-shrink-2 { font-size: 1.125rem; line-height: 1.5rem; }
 
 /* tailwind-built.css is a precompiled, purged build — it only contains
    the utility classes actually written in the markup at build time, so

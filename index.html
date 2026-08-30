@@ -279,8 +279,8 @@ function renderLiveCard(match) {
     <div class="p-3 sm:p-4 flex items-center justify-between gap-2 relative">
       <div class="flex-1 flex flex-col sm:flex-row justify-center sm:justify-end items-center gap-1 sm:gap-3 min-w-0">
         ${sweCountBadge(t1, 'hidden sm:inline-flex sm:order-1')}
-        ${teamLogo(t1, 'order-1 sm:order-3 w-8 h-8 sm:w-10 sm:h-10 rounded-lg object-contain bg-surface-container p-1 shrink-0')}
-        <span class="order-2 font-bold text-xs sm:text-lg text-center sm:text-right break-words wrap-balance leading-tight${t1swe ? ' text-swedish-gold' : ''}">${t1?.name || 'TBD'}</span>
+        ${teamLogo(t1, 'order-1 sm:order-3 w-8 h-8 sm:w-10 sm:h-10 rounded-lg object-contain team-logo-bg p-1 shrink-0')}
+        <span class="order-2 font-bold text-xs sm:text-lg text-center sm:text-right break-words leading-tight ${teamNameSizeClass(t1?.name)}${t1swe ? ' text-swedish-gold' : ''}">${t1?.name || 'TBD'}</span>
       </div>
       <div class="flex flex-col items-center justify-center shrink-0 min-w-[76px] sm:min-w-[120px]">
         <span class="font-label-caps text-label-caps text-swedish-gold mb-1 hidden sm:block">LIVE</span>
@@ -288,8 +288,8 @@ function renderLiveCard(match) {
         <div class="mt-1">${mapDots(match, t1Maps, t2Maps)}</div>
       </div>
       <div class="flex-1 flex flex-col sm:flex-row justify-center sm:justify-start items-center gap-1 sm:gap-3 min-w-0">
-        ${teamLogo(t2, 'order-1 w-8 h-8 sm:w-10 sm:h-10 rounded-lg object-contain bg-surface-container p-1 shrink-0')}
-        <span class="order-2 font-bold text-xs sm:text-lg text-center sm:text-left break-words wrap-balance leading-tight${t2swe ? ' text-swedish-gold' : ''}">${t2?.name || 'TBD'}</span>
+        ${teamLogo(t2, 'order-1 w-8 h-8 sm:w-10 sm:h-10 rounded-lg object-contain team-logo-bg p-1 shrink-0')}
+        <span class="order-2 font-bold text-xs sm:text-lg text-center sm:text-left break-words leading-tight ${teamNameSizeClass(t2?.name)}${t2swe ? ' text-swedish-gold' : ''}">${t2?.name || 'TBD'}</span>
         ${sweCountBadge(t2, 'hidden sm:inline-flex')}
       </div>
       <div class="absolute top-2 right-2 sm:top-4 sm:right-4 flex items-center gap-1.5">
@@ -319,16 +319,16 @@ function renderUpcomingCard(match) {
     <div class="p-3 sm:p-4 flex items-center justify-between gap-2">
       <div class="flex-1 flex flex-col sm:flex-row justify-center sm:justify-end items-center gap-1 sm:gap-3 min-w-0">
         ${sweCountBadge(t1, 'hidden sm:inline-flex sm:order-1')}
-        ${teamLogo(t1, 'order-1 sm:order-3 w-8 h-8 sm:w-10 sm:h-10 rounded-lg object-contain bg-surface-container-highest p-1 opacity-70 shrink-0')}
-        <span class="order-2 font-bold text-xs sm:text-lg text-center sm:text-right text-on-surface-variant break-words wrap-balance leading-tight${t1swe ? ' text-swedish-gold/90' : ''}">${t1?.name || 'TBD'}</span>
+        ${teamLogo(t1, 'order-1 sm:order-3 w-8 h-8 sm:w-10 sm:h-10 rounded-lg object-contain team-logo-bg p-1 opacity-70 shrink-0')}
+        <span class="order-2 font-bold text-xs sm:text-lg text-center sm:text-right text-on-surface-variant break-words leading-tight ${teamNameSizeClass(t1?.name)}${t1swe ? ' text-swedish-gold/90' : ''}">${t1?.name || 'TBD'}</span>
       </div>
       <div class="flex flex-col items-center justify-center shrink-0 min-w-[64px] sm:min-w-[120px]">
         <span class="font-label-caps text-label-caps text-tertiary mb-1">${timeStr}</span>
         <div class="font-match-score text-match-score tracking-wider text-on-surface-variant">0 : 0</div>
       </div>
       <div class="flex-1 flex flex-col sm:flex-row justify-center sm:justify-start items-center gap-1 sm:gap-3 min-w-0">
-        ${teamLogo(t2, 'order-1 w-8 h-8 sm:w-10 sm:h-10 rounded-lg object-contain bg-surface-container-highest p-1 opacity-70 shrink-0')}
-        <span class="order-2 font-bold text-xs sm:text-lg text-center sm:text-left text-on-surface-variant break-words wrap-balance leading-tight${t2swe ? ' text-swedish-gold/90' : ''}">${t2?.name || 'TBD'}</span>
+        ${teamLogo(t2, 'order-1 w-8 h-8 sm:w-10 sm:h-10 rounded-lg object-contain team-logo-bg p-1 opacity-70 shrink-0')}
+        <span class="order-2 font-bold text-xs sm:text-lg text-center sm:text-left text-on-surface-variant break-words leading-tight ${teamNameSizeClass(t2?.name)}${t2swe ? ' text-swedish-gold/90' : ''}">${t2?.name || 'TBD'}</span>
         ${sweCountBadge(t2, 'hidden sm:inline-flex')}
       </div>
     </div>

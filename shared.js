@@ -430,17 +430,36 @@ async function ensureMatchHistory() {
     // the swe_history_v3 cache had been cleared, that meant one flaky
     // request could make history look completely "erased" even though
     // most of it had just been fetched successfully.
+    // A single transient failure on one page (page 13 of 88 timing out,
+    // say) used to abort the entire walk immediately, keeping whatever
+    // had merged so far — so an "All Time" total could land almost
+    // anywhere depending purely on where a network blip happened to hit
+    // that particular reload, which is what made the count swing wildly
+    // (1300 one refresh, 2400 the next) instead of settling once the
+    // real history was fully fetched. Retry a failing page a few times
+    // with a short backoff before treating it as a real failure.
+    const PAGE_RETRIES = 3;
     let page = 1;
     let pageFailed = false;
     while (!pageFailed) {
       let pastPage;
-      try {
-        pastPage = await pandaFetch(`/csgo/matches/past?per_page=100&page=${page}&include=opponents,results,games,winner`, { bypassGuard: true });
-      } catch(e) {
-        console.warn(`[SWE] Failed to load match history page ${page}:`, e);
-        pageFailed = true;
-        break;
+      let attempt = 0;
+      for (;;) {
+        try {
+          pastPage = await pandaFetch(`/csgo/matches/past?per_page=100&page=${page}&include=opponents,results,games,winner`, { bypassGuard: true });
+          break;
+        } catch(e) {
+          attempt++;
+          if (attempt >= PAGE_RETRIES) {
+            console.warn(`[SWE] Failed to load match history page ${page} after ${attempt} attempts:`, e);
+            pageFailed = true;
+            break;
+          }
+          console.warn(`[SWE] Retrying match history page ${page} (attempt ${attempt + 1}/${PAGE_RETRIES}):`, e);
+          await new Promise(r => setTimeout(r, 400 * attempt));
+        }
       }
+      if (pageFailed) break;
       if (!pastPage.length) break;
       const relevant = pastPage.filter(m => m.opponents?.length === 2 && (sweInfo(m.opponents[0]?.opponent) || sweInfo(m.opponents[1]?.opponent)));
       if (relevant.length) {
@@ -710,7 +729,17 @@ function normPlayerNameFE(name) {
 // down, from 0 (ignored entirely — pure K/D + ADR + sample size) to 1
 // (full effect). Turn this down to let raw stats matter more, up to weight
 // Valve's rank more heavily.
-const TIER_INFLUENCE = 0.15;
+const TIER_INFLUENCE = 0.35;
+
+// How many maps it takes for the sample-size discount to reach full
+// confidence (1.0) in a player's stats. A player with fewer maps than
+// this still ranks lower than an equally-good player with more — that
+// part is intentional, the discount is what "confidence" ramping means
+// — but a lower number here shortens the runway, so someone with, say,
+// 5-6 maps isn't as heavily penalized against someone with 15+. Raise it
+// to demand a longer track record before trusting the raw numbers, lower
+// it to let a short sample carry more weight sooner.
+const CONFIDENCE_RAMP_MAPS = 6;
 
 // Valve's published lists run to ~30 ranked teams. #1 gets full weight,
 // rank 30 gets a low-but-nonzero weight, and a team absent from the list
@@ -745,7 +774,7 @@ function buildValveTierMap(teamList, valveGlobal) {
 // solid performances against top-tier teams.
 function playerRating(stat, tierWeight = 0.5) {
   if (!stat || !stat.maps_played) return 0;
-  const confidence  = Math.min(stat.maps_played / 10, 1); // ramps up over the first 10 maps
+  const confidence  = Math.min(stat.maps_played / CONFIDENCE_RAMP_MAPS, 1); // ramps up over the first CONFIDENCE_RAMP_MAPS maps
   const kdComponent  = stat.kd_ratio || 0;    // typically ~0.5–2.0
   const adrComponent = (stat.adr || 0) / 100; // typically ~0.5–1.2
   const rawScore = kdComponent * 0.5 + adrComponent * 0.5;
@@ -913,6 +942,22 @@ function cacheLogoFromTeam(t) {
   if (!url) return;
   const cache = _getLogoCache();
   if (cache[t.id] !== url) { cache[t.id] = url; _saveLogoCache(); }
+}
+
+// Long team names (e.g. "GamerLegion") get a smaller font instead of
+// wrapping mid-word. `variant` picks which set of CSS classes to use:
+// 'card' for the small match-card team names (index/history, which are
+// already text-xs on mobile and only need shrinking at sm+), 'heading'
+// for the larger, non-responsive Teams page heading. Returns '' for
+// names short enough to just fit at the normal size.
+function teamNameSizeClass(name, variant = 'card') {
+  const len = (name || '').length;
+  const tiers = variant === 'heading'
+    ? ['', 'team-heading-shrink-1', 'team-heading-shrink-2']
+    : ['', 'team-name-shrink-1', 'team-name-shrink-2'];
+  if (len > 15) return tiers[2];
+  if (len > 9)  return tiers[1];
+  return tiers[0];
 }
 
 function teamLogo(t, cls = 'team-logo') {
