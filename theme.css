@@ -127,7 +127,7 @@ body {
 .player-meta-badge {
   display: inline-block;
   max-width: 100%;
-  background: rgba(0, 0, 0, 0.68);
+  background: rgba(0, 34, 68, 0.4);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
 }
 

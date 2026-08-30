@@ -223,7 +223,7 @@ function renderTeamCard(team) {
     : `<div class="text-sm text-on-surface-variant">No recorded matches yet.</div>`;
 
   const sweSquadHtml = info.players?.length
-    ? `<div class="mt-1 flex flex-col items-end">${info.players.map(n => `<span class="font-metadata text-metadata text-on-surface-variant">• ${n}</span>`).join('')}</div>`
+    ? `<div class="mt-1 flex flex-wrap justify-end gap-1 max-w-[170px]">${info.players.map(n => `<span class="font-metadata text-metadata text-on-surface-variant bg-surface-container-highest/40 px-1.5 py-0.5 rounded">${n}</span>`).join('')}</div>`
     : '';
 
   return `
