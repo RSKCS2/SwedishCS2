@@ -101,6 +101,8 @@ let allTeams = [];
 let teamQuery = '';
 let valveGlobalCache = [];
 let valveEuropeCache = [];
+let valveAmericasCache = [];
+let valveAsiaCache = [];
 let sweValveRankMap  = {};
 
 window.addEventListener('DOMContentLoaded', async () => {
@@ -119,25 +121,32 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     allTeams = Object.values(profiles);
 
-    // Pull Valve's own published world/EU regional standings so the rank
-    // badges reflect Valve's numbers, not our derived win/loss form. The
-    // Swedish rank (#1, #2, #3, …) is just those world ranks reordered
-    // among the Swedish teams — best world rank wins.
-    try {
-      [valveGlobalCache, valveEuropeCache] = await Promise.all([
-        fetchValveStandings('global'),
-        fetchValveStandings('europe'),
-      ]);
-    } catch(e) { console.warn('[SWE] Valve standings unavailable:', e); }
-    sweValveRankMap = computeSwedishValveRanks(allTeams, valveGlobalCache);
-
     // Roster-based country for the non-majority-Swedish teams (e.g. MIBR,
     // GamerLegion) so the flag reflects who's actually on the team instead
-    // of PandaScore's often-stale `location` field.
+    // of PandaScore's often-stale `location` field. Resolved before the
+    // standings fetch below since the region-aware rank lookup needs to
+    // know each team's home region first.
     try {
       const nonSweIds = allTeams.filter(t => !(sweInfo({ id: t.id })?.isMajority)).map(t => t.id);
       await ensureTeamCountries(nonSweIds);
     } catch(e) { console.warn('[SWE] Could not load team countries:', e); }
+
+    // Pull Valve's own published world/regional standings so the rank
+    // badges reflect Valve's numbers, not our derived win/loss form. The
+    // Swedish rank (#1, #2, #3, …) is just those world ranks reordered
+    // among the Swedish teams — best world rank wins. Each team's regional
+    // badge is looked up against its own home region (see teamValveRegion)
+    // rather than always assuming Europe, so e.g. a Brazilian-majority
+    // roster gets checked against Americas standings.
+    try {
+      [valveGlobalCache, valveEuropeCache, valveAmericasCache, valveAsiaCache] = await Promise.all([
+        fetchValveStandings('global'),
+        fetchValveStandings('europe'),
+        fetchValveStandings('americas'),
+        fetchValveStandings('asia'),
+      ]);
+    } catch(e) { console.warn('[SWE] Valve standings unavailable:', e); }
+    sweValveRankMap = computeSwedishValveRanks(allTeams, valveGlobalCache);
 
     allTeams.sort((a, b) => {
       const ra = sweValveRankMap[a.id], rb = sweValveRankMap[b.id];
@@ -187,7 +196,20 @@ function renderTeamCard(team) {
   const recent = team.matches.slice(0, 3);
   const sweRank   = sweValveRankMap[team.id] || null;
   const worldRank = findValveRank(valveGlobalCache, team.name)?.rank ?? null;
-  const euRank    = findValveRank(valveEuropeCache, team.name)?.rank ?? null;
+  const teamRegion = teamValveRegion(team.id);
+  const regionCache = { europe: valveEuropeCache, americas: valveAmericasCache, asia: valveAsiaCache }[teamRegion];
+  const regionRank  = findValveRank(regionCache, team.name)?.rank ?? null;
+  const regionLabel = VALVE_REGION_LABELS[teamRegion];
+
+  // Show one number, not "WORLD #x" / "EU #x" side by side — prefer the
+  // team's home-region rank since it's the more specific standing, and
+  // fall back to world rank if the team isn't on its region's list. The
+  // tooltip spells out both so nothing is lost, whichever region this
+  // team's roster actually belongs to.
+  const rankBadgeValue = regionRank ?? worldRank;
+  const rankBadgeTitle = regionRank
+    ? `${regionLabel} #${regionRank}${worldRank ? ` · World #${worldRank}` : ''}`
+    : (worldRank ? `World #${worldRank}` : '');
 
   const medal = sweRank === 1 ? 'gold' : sweRank === 2 ? 'silver' : sweRank === 3 ? 'bronze' : null;
   const cardMedalCls  = medal ? `rank-${medal} rank-shine` : '';
@@ -227,8 +249,7 @@ function renderTeamCard(team) {
           <h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-bold break-words ${teamNameSizeClass(team.name, 'heading')}">${team.name}</h2>
           <p class="font-metadata text-metadata text-on-surface-variant flex items-center gap-1">${nationalityLine}</p>
           <div class="flex gap-2 mt-1 flex-wrap">
-            ${worldRank ? `<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container-highest/40 px-1.5 py-0.5 rounded">WORLD #${worldRank}</span>` : ''}
-            ${euRank ? `<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container-highest/40 px-1.5 py-0.5 rounded">EU #${euRank}</span>` : ''}
+            ${rankBadgeValue ? `<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container-highest/40 px-1.5 py-0.5 rounded cursor-help" title="${rankBadgeTitle}">#${rankBadgeValue}</span>` : ''}
           </div>
         </div>
       </div>

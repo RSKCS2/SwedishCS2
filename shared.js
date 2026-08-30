@@ -307,6 +307,44 @@ function classifyTeamCountry(players) {
   return { type: 'international' };
 }
 
+// Valve publishes separate Regional Standings for Europe, Americas, and
+// Asia (Oceania rolls into Asia). A team's *home* region for rank display
+// should follow the nationality of its roster — not just default to
+// Europe because this site's focus is Swedish teams — so a team like
+// LNZ (Brazilian) gets checked against Americas standings, not Europe's.
+const AMERICAS_CODES = new Set([
+  'US','CA','BR','AR','CL','PE','UY','PY','BO','EC','CO','VE',
+  'MX','CR','PA','GT','HN','SV','NI','DO','PR','CU','JM','TT',
+]);
+const ASIA_CODES = new Set([
+  'CN','JP','KR','TW','HK','MO','TH','VN','PH','ID','MY','SG',
+  'IN','PK','BD','MN','AU','NZ',
+]);
+
+function regionForCountryCode(code) {
+  if (!code) return null;
+  if (AMERICAS_CODES.has(code)) return 'americas';
+  if (ASIA_CODES.has(code)) return 'asia';
+  if (EUROPE_CODES.has(code)) return 'europe';
+  return null;
+}
+
+const VALVE_REGION_LABELS = { europe: 'Europe', americas: 'Americas', asia: 'Asia' };
+
+// Resolves which Valve regional-standings list a team should be looked up
+// in. Majority-Swedish rosters (the site's focus) and mixed-European
+// rosters default to Europe, as before; a roster with a clear non-European
+// majority nationality (e.g. Brazilian) switches to that nationality's
+// region instead.
+function teamValveRegion(teamId) {
+  if (sweInfo({ id: teamId })?.isMajority) return 'europe';
+  const info = teamCountryInfo(teamId);
+  if (info?.type === 'majority' && info.code) {
+    return regionForCountryCode(info.code) || 'europe';
+  }
+  return 'europe';
+}
+
 async function ensureTeamCountries(teamIds) {
   if (_pandaScoreUnavailable) {
     console.warn('[SWE] Skipping team country fetches – PandaScore unavailable');
