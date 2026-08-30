@@ -241,7 +241,7 @@ function renderTeamCard(team) {
       ${teamLogo({ image_url: team.logo, name: team.name }, 'max-h-full max-w-full object-contain')}
     </div>
 
-    <div class="flex justify-between items-start z-10 gap-3">
+    <div class="flex justify-between items-end z-10 gap-3">
       <div class="flex-1 min-w-0">
         <h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-bold flex items-center gap-2 ${teamNameSizeClass(team.name, 'heading')}">
           ${teamFlag ? `<span class="shrink-0">${teamFlag}</span>` : ''}<span class="break-words">${team.name}</span>
