@@ -223,7 +223,7 @@ function renderTeamCard(team) {
     : `<div class="text-sm text-on-surface-variant">No recorded matches yet.</div>`;
 
   const sweSquadHtml = info.players?.length
-    ? `<div class="flex flex-wrap justify-end gap-1 z-10">${info.players.map(n => `<span class="font-metadata text-metadata text-on-surface-variant bg-surface-container-highest/40 px-1.5 py-0.5 rounded">${n}</span>`).join('')}</div>`
+    ? `<div class="flex flex-wrap gap-1 flex-1 min-w-0">${info.players.map(n => `<span class="font-metadata text-metadata text-on-surface-variant bg-surface-container-highest/40 px-1.5 py-0.5 rounded">${n}</span>`).join('')}</div>`
     : '';
 
   return `
@@ -241,19 +241,21 @@ function renderTeamCard(team) {
       ${teamLogo({ image_url: team.logo, name: team.name }, 'max-h-full max-w-full object-contain')}
     </div>
 
-    <div class="flex justify-between items-end z-10 gap-3">
+    <div class="flex justify-between items-start z-10 gap-3">
       <div class="flex-1 min-w-0">
         <h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-bold flex items-center gap-2 ${teamNameSizeClass(team.name, 'heading')}">
           ${teamFlag ? `<span class="shrink-0">${teamFlag}</span>` : ''}<span class="break-words">${team.name}</span>
         </h2>
-        <div class="flex gap-2 mt-1 flex-wrap">
-          ${regionRank ? `<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container-highest/40 px-1.5 py-0.5 rounded">${regionLabel} #${regionRank}</span>` : ''}
-          ${worldRank ? `<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container-highest/40 px-1.5 py-0.5 rounded">WORLD #${worldRank}</span>` : ''}
-        </div>
       </div>
-      ${squadLabel ? `<div class="text-right shrink-0"><span class="font-label-caps text-label-caps text-swedish-gold block">Squad</span><span class="font-bold text-sm text-on-surface">${squadLabel}</span></div>` : ''}
     </div>
-    ${sweSquadHtml ? `<div class="z-10 mt-1">${sweSquadHtml}</div>` : ''}
+    ${squadLabel ? `<div class="flex items-end gap-2 flex-wrap z-10 mt-1">
+      <div class="shrink-0"><span class="font-label-caps text-label-caps text-swedish-gold block">Squad</span><span class="font-bold text-sm text-on-surface">${squadLabel}</span></div>
+      ${sweSquadHtml}
+    </div>` : ''}
+    <div class="flex gap-2 mt-1 flex-wrap z-10">
+      ${regionRank ? `<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container-highest/40 px-1.5 py-0.5 rounded">${regionLabel} #${regionRank}</span>` : ''}
+      ${worldRank ? `<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container-highest/40 px-1.5 py-0.5 rounded">WORLD #${worldRank}</span>` : ''}
+    </div>
     <div class="bg-gradient-to-b from-surface-container-highest/50 via-surface-container-highest/25 to-transparent rounded-lg p-3 z-10 mt-2 border border-outline-variant/10">
       <span class="font-label-caps text-label-caps text-on-surface-variant block mb-2">Recent Matches</span>
       <div class="flex flex-col gap-2">${recentHtml}</div>
