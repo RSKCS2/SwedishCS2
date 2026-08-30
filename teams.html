@@ -224,7 +224,7 @@ function renderTeamCard(team) {
           ${teamLogo({ image_url: team.logo, name: team.name }, 'max-w-full max-h-full object-contain')}
         </div>
         <div class="flex-1 min-w-0">
-          <h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-bold break-words">${team.name}</h2>
+          <h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-bold break-words wrap-balance">${team.name}</h2>
           <p class="font-metadata text-metadata text-on-surface-variant flex items-center gap-1">${nationalityLine}</p>
           <div class="flex gap-2 mt-1 flex-wrap">
             ${worldRank ? `<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container-highest/40 px-1.5 py-0.5 rounded">WORLD #${worldRank}</span>` : ''}

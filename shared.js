@@ -1104,28 +1104,46 @@ function matchContext(match) {
   return stage ? `${label} · ${stage}` : label;
 }
 
+// Turns whatever PandaScore hands back for a prizepool (a raw number, or
+// a string like "$400,000") into a short, readable line — no emoji, no
+// currency-formatting library. Falls back to the raw value if it can't be
+// parsed as a number, so an unexpected format still shows something
+// instead of an empty tooltip.
+function formatPrizepool(value) {
+  if (value == null || value === '') return '';
+  const n = typeof value === 'number' ? value : parseFloat(String(value).replace(/[^0-9.]/g, ''));
+  if (!Number.isFinite(n) || n <= 0) return String(value);
+  if (n >= 1000000) {
+    const millions = n / 1000000;
+    return '$' + (Number.isInteger(millions) ? millions : millions.toFixed(1)) + ' million';
+  }
+  if (n >= 1000) return '$' + Math.round(n / 1000) + ',000';
+  return '$' + n;
+}
+
 // PandaScore's match objects already carry a full nested `tournament`
 // object (tier, prizepool, etc.) by default — no extra `include=` needed —
 // so this is a zero-extra-request, zero-extra-KV-write addition. Verify
 // `tier`/`prizepool` are actually populated on your account's response
 // shape before relying on this (pull one cached match and check), since
 // field presence in nested includes can vary by plan.
+//
+// The prize pool never gets its own line on the card — it only shows up
+// as a hover tooltip on the tier badge. A card with no tier shows no
+// prize figure either, since there's nothing to hang the tooltip on.
 function tournamentBadge(match) {
   const t = match?.tournament;
-  if (!t) return '';
+  if (!t || !t.tier) return '';
   const tierClass = {
     s: 'bg-swedish-gold text-deep-navy',
     a: 'bg-blue-500/20 text-blue-300',
   }[String(t.tier || '').toLowerCase()] || 'bg-outline-variant/20 text-on-surface-variant';
 
-  const tierBadge = t.tier
-    ? `<span class="font-label-caps text-label-caps px-1.5 py-0.5 rounded uppercase ${tierClass}">${t.tier}-Tier</span>`
-    : '';
-  const prizeLine = t.prizepool
-    ? `<span class="font-metadata text-metadata text-on-surface-variant">🏆 ${t.prizepool}</span>`
-    : '';
-  if (!tierBadge && !prizeLine) return '';
-  return `<span class="flex items-center gap-2 justify-center flex-wrap">${tierBadge}${prizeLine}</span>`;
+  const prizeText  = formatPrizepool(t.prizepool);
+  const tooltipAttrs = prizeText ? ` title="${prizeText} prize pool" class="font-label-caps text-label-caps px-1.5 py-0.5 rounded uppercase cursor-help ${tierClass}"` : ` class="font-label-caps text-label-caps px-1.5 py-0.5 rounded uppercase ${tierClass}"`;
+
+  const tierBadge = `<span${tooltipAttrs}>${t.tier}-Tier</span>`;
+  return `<span class="flex items-center gap-2 justify-center flex-wrap">${tierBadge}</span>`;
 }
 
 // Head-to-head record between two specific teams, computed entirely from

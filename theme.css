@@ -103,3 +103,24 @@ body {
 .rank-badge-bronze { background: linear-gradient(135deg, #E3A469, #B5702F) !important; color: #002244 !important; }
 
 .rank-shine { position: relative; overflow: hidden; }
+
+/* Long team names (e.g. "GamerLegion") in narrow flex columns still need
+   to wrap when they don't fit, but Tailwind's break-words alone splits
+   the word wherever it runs out of room with no hyphen, so it reads like
+   two separate words ("GamerLeg" / "ion"). Adding hyphens here keeps the
+   forced break but makes it look intentional ("Gamer-" / "legion"). */
+.wrap-balance {
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: auto;
+}
+
+/* tailwind-built.css is a precompiled, purged build — it only contains
+   the utility classes actually written in the markup at build time, so
+   a class like cursor-help that isn't used anywhere else silently does
+   nothing on pages using that stylesheet (history, teams, players).
+   Defined by hand here instead, since it's used for the tier-badge
+   prize pool tooltip. */
+.cursor-help {
+  cursor: help;
+}

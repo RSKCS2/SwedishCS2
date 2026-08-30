@@ -313,7 +313,7 @@ function renderPlayerCard(p, position) {
     </div>
     <div class="p-4 flex flex-col gap-3 flex-1">
       ${p.role ? `<span class="font-label-caps text-label-caps bg-surface-container-highest text-on-surface-variant px-2 py-1 rounded self-start">${p.role}</span>` : ''}
-      <div class="grid grid-cols-${statCols.length} gap-2 text-center border-t border-outline-variant/10 pt-3">
+      <div class="grid gap-2 text-center border-t border-outline-variant/10 pt-3" style="grid-template-columns: repeat(${statCols.length}, minmax(0, 1fr));">
         ${statCols.map(s => `
         <div>
           <div class="font-bold text-sm text-on-surface">${s.value}</div>
