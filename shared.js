@@ -668,6 +668,19 @@ function countryFlag(code) {
 }
 
 // ── SHARE BUTTON ──────────────────────────────────────────────────────────
+function toggleMobileMenu() {
+  const menu = document.getElementById('mobile-menu');
+  const btn  = document.getElementById('mobile-menu-btn');
+  if (!menu) return;
+  const isOpen = !menu.classList.contains('hidden');
+  menu.classList.toggle('hidden');
+  if (btn) {
+    btn.setAttribute('aria-expanded', String(!isOpen));
+    const icon = btn.querySelector('.material-symbols-outlined');
+    if (icon) icon.textContent = isOpen ? 'menu' : 'close';
+  }
+}
+
 async function sharePage(title) {
   const url = window.location.href;
   if (navigator.share) {

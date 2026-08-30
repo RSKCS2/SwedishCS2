@@ -27,6 +27,16 @@
         <a class="nav-link text-on-surface-variant font-medium hover:text-swedish-gold transition-colors duration-200 h-full flex items-center" href="players">Players</a>
       </nav>
     </div>
+    <button id="mobile-menu-btn" type="button" onclick="toggleMobileMenu()" aria-expanded="false" aria-controls="mobile-menu" aria-label="Toggle navigation menu"
+      class="md:hidden w-9 h-9 flex items-center justify-center rounded-full bg-deep-navy border border-outline-variant/30 text-on-surface-variant">
+      <span class="material-symbols-outlined text-lg">menu</span>
+    </button>
+  </div>
+  <div id="mobile-menu" class="hidden md:hidden border-t border-outline-variant/20 px-container-padding py-3 flex flex-col gap-1">
+    <a class="nav-link text-swedish-gold font-bold py-2" href="./" aria-current="page">Live Scores</a>
+    <a class="nav-link text-on-surface-variant font-medium py-2" href="history">Results</a>
+    <a class="nav-link text-on-surface-variant font-medium py-2" href="teams">Teams</a>
+    <a class="nav-link text-on-surface-variant font-medium py-2" href="players">Players</a>
   </div>
 </header>
 
