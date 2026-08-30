@@ -551,12 +551,18 @@ function buildPlayerStatProfiles(rows, cutoff, players = [], end = null) {
     }
     const pid = r.player_id ?? (r.player_name ? nameToId[normPlayerNameFE(r.player_name)] : null);
     if (!pid) return;
-    if (!agg[pid]) agg[pid] = { kills: 0, deaths: 0, adrSum: 0, adrCount: 0, maps: 0 };
+    if (!agg[pid]) agg[pid] = { kills: 0, deaths: 0, adrSum: 0, adrCount: 0, maps: 0, headshots: 0, multikills: 0, firstKills: 0 };
     const a = agg[pid];
     a.kills += r.kills || 0;
     a.deaths += r.deaths || 0;
     if (r.adr != null) { a.adrSum += r.adr; a.adrCount++; }
     a.maps++;
+    // Only populated on GRID-sourced rows (see worker.js's
+    // fetchGridPlayerRows) — PandaScore rows leave these undefined, which
+    // just contributes 0 here rather than skewing anything.
+    a.headshots += r.headshots || 0;
+    if (r.multikills?.length) a.multikills += r.multikills.reduce((s, m) => s + (m.count || 0), 0);
+    if (r.first_kill) a.firstKills++;
   });
 
   const profiles = {};
@@ -565,6 +571,9 @@ function buildPlayerStatProfiles(rows, cutoff, players = [], end = null) {
       kd_ratio:    a.maps ? +(a.kills / Math.max(a.deaths, 1)).toFixed(2) : 0,
       adr:         a.adrCount ? Math.round(a.adrSum / a.adrCount) : 0,
       maps_played: a.maps,
+      hs_pct:      a.kills ? Math.round((a.headshots / a.kills) * 100) : null,
+      multikills:  a.multikills || null,
+      first_kills: a.firstKills || null,
     };
   });
   return profiles;
@@ -899,4 +908,52 @@ function matchContext(match) {
   if (tourn && tourn !== serie && tourn !== league) parts.push(tourn);
   const label = parts.join(' – ') || 'CS2';
   return stage ? `${label} · ${stage}` : label;
+}
+
+// PandaScore's match objects already carry a full nested `tournament`
+// object (tier, prizepool, etc.) by default — no extra `include=` needed —
+// so this is a zero-extra-request, zero-extra-KV-write addition. Verify
+// `tier`/`prizepool` are actually populated on your account's response
+// shape before relying on this (pull one cached match and check), since
+// field presence in nested includes can vary by plan.
+function tournamentBadge(match) {
+  const t = match?.tournament;
+  if (!t) return '';
+  const tierClass = {
+    s: 'bg-swedish-gold text-deep-navy',
+    a: 'bg-blue-500/20 text-blue-300',
+  }[String(t.tier || '').toLowerCase()] || 'bg-outline-variant/20 text-on-surface-variant';
+
+  const tierBadge = t.tier
+    ? `<span class="font-label-caps text-label-caps px-1.5 py-0.5 rounded uppercase ${tierClass}">${t.tier}-Tier</span>`
+    : '';
+  const prizeLine = t.prizepool
+    ? `<span class="font-metadata text-metadata text-on-surface-variant">🏆 ${t.prizepool}</span>`
+    : '';
+  if (!tierBadge && !prizeLine) return '';
+  return `<span class="flex items-center gap-2 justify-center flex-wrap">${tierBadge}${prizeLine}</span>`;
+}
+
+// Head-to-head record between two specific teams, computed entirely from
+// match history already cached client-side (ensureMatchHistory()) — no
+// extra network request, no worker/KV involvement at all.
+function headToHead(matches, teamAId, teamBId) {
+  if (!teamAId || !teamBId) return null;
+  let winsA = 0, winsB = 0;
+  const relevant = (matches || []).filter(m => {
+    const ids = [m.opponents?.[0]?.opponent?.id, m.opponents?.[1]?.opponent?.id];
+    return ids.includes(teamAId) && ids.includes(teamBId);
+  });
+  relevant.forEach(m => {
+    if (m.winner?.id === teamAId) winsA++;
+    else if (m.winner?.id === teamBId) winsB++;
+  });
+  if (!relevant.length) return null;
+  return { played: relevant.length, winsA, winsB };
+}
+
+function headToHeadLine(matches, teamA, teamB) {
+  const h2h = headToHead(matches, teamA?.id, teamB?.id);
+  if (!h2h) return '';
+  return `<span class="font-metadata text-metadata text-on-surface-variant">H2H: ${teamA?.name || 'A'} ${h2h.winsA}-${h2h.winsB} ${teamB?.name || 'B'}</span>`;
 }

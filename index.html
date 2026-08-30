@@ -121,14 +121,21 @@ async function loadNews() {
   }
 }
 
+let historyMatches = [];
+
 async function fetchMatches() {
   try {
     await ensureSwedishData();
 
-    const [runningList, upcomingList] = await Promise.all([
+    const [runningList, upcomingList, history] = await Promise.all([
       pandaFetch('/csgo/matches/running?per_page=50&include=opponents,results,games,pick_bans'),
       pandaFetch('/csgo/matches/upcoming?per_page=30&sort=begin_at&include=opponents'),
+      // Client-side only, served straight from the Worker's KV cache (no
+      // PandaScore hit) — used purely for the head-to-head line on upcoming
+      // cards. A failure here shouldn't break the live scoreboard.
+      ensureMatchHistory().catch(e => { console.warn('[SWE] History unavailable for H2H:', e); return []; }),
     ]);
+    historyMatches = history || [];
 
     const sweRunning  = runningList.filter(hasSweTeam);
     const sweUpcoming = upcomingList.filter(hasSweTeam);
@@ -283,6 +290,8 @@ function renderUpcomingCard(match) {
   const t2swe = sweInfo(t2);
   const context = matchContext(match);
   const timeStr = new Date(match.begin_at).toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' }).toUpperCase();
+  const h2h = headToHeadLine(historyMatches, t1, t2);
+  const tBadge = tournamentBadge(match);
 
   return `
   <article class="bg-deep-navy rounded-xl overflow-hidden border border-outline-variant/30 hover:bg-primary-container transition-colors">
@@ -302,8 +311,10 @@ function renderUpcomingCard(match) {
         ${sweCountBadge(t2, 'hidden sm:inline-flex')}
       </div>
     </div>
-    <div class="bg-surface-container-low/50 py-2 px-4 text-center border-t border-outline-variant/10">
+    <div class="bg-surface-container-low/50 py-2 px-4 flex flex-col items-center gap-1 text-center border-t border-outline-variant/10">
       <span class="font-metadata text-metadata text-on-surface-variant/70">${noOrphan(context)}</span>
+      ${tBadge}
+      ${h2h}
     </div>
   </article>`;
 }

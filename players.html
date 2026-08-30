@@ -284,6 +284,15 @@ function renderPlayerCard(p, position) {
   const kd   = stats.kd_ratio != null ? stats.kd_ratio : '—';
   const adr  = stats.adr != null ? stats.adr : '—';
   const maps = stats.maps_played != null ? stats.maps_played : '—';
+  // hs_pct/multikills only ever populate from GRID-sourced rows (see
+  // shared.js's buildPlayerStatProfiles) — shown only when present so
+  // PandaScore-only players don't render a permanent "—".
+  const extraLine = (stats.hs_pct != null || stats.multikills)
+    ? `<div class="flex justify-center gap-3 font-label-caps text-label-caps text-on-surface-variant border-t border-outline-variant/10 pt-2">
+         ${stats.hs_pct != null ? `<span>${stats.hs_pct}% HS</span>` : ''}
+         ${stats.multikills ? `<span>${stats.multikills} Multi-K</span>` : ''}
+       </div>`
+    : '';
 
   return `
   <div class="bg-deep-navy rounded-xl border border-outline-variant/30 hover:border-outline-variant/60 transition-colors overflow-hidden flex flex-col relative">
@@ -311,6 +320,7 @@ function renderPlayerCard(p, position) {
           <div class="font-label-caps text-label-caps text-on-surface-variant">Maps</div>
         </div>
       </div>
+      ${extraLine}
     </div>
   </div>`;
 }
