@@ -288,14 +288,16 @@ function renderPlayerCard(p, position) {
   const adr  = stats.adr != null ? stats.adr : '—';
   const maps = stats.maps_played != null ? stats.maps_played : '—';
   // hs_pct/multikills only ever populate from GRID-sourced rows (see
-  // shared.js's buildPlayerStatProfiles) — shown only when present so
-  // PandaScore-only players don't render a permanent "—".
-  const extraLine = (stats.hs_pct != null || stats.multikills)
-    ? `<div class="flex justify-center gap-3 font-label-caps text-label-caps text-on-surface-variant border-t border-outline-variant/10 pt-2">
-         ${stats.hs_pct != null ? `<span>${stats.hs_pct}% HS</span>` : ''}
-         ${stats.multikills ? `<span>${stats.multikills} Multi-K</span>` : ''}
-       </div>`
-    : '';
+  // shared.js's buildPlayerStatProfiles) — added as extra columns only
+  // when present, in the same stat grid as K/D, ADR and Maps, instead of
+  // a separate row underneath.
+  const statCols = [
+    { label: 'K/D', value: kd },
+    { label: 'ADR', value: adr },
+    { label: 'Maps', value: maps },
+  ];
+  if (stats.hs_pct != null) statCols.push({ label: 'HS%', value: stats.hs_pct + '%' });
+  if (stats.multikills) statCols.push({ label: 'Multi-K', value: stats.multikills });
 
   return `
   <div class="bg-deep-navy rounded-xl border border-outline-variant/30 hover:border-outline-variant/60 transition-colors overflow-hidden flex flex-col relative">
@@ -309,21 +311,13 @@ function renderPlayerCard(p, position) {
     </div>
     <div class="p-4 flex flex-col gap-3 flex-1">
       ${p.role ? `<span class="font-label-caps text-label-caps bg-surface-container-highest text-on-surface-variant px-2 py-1 rounded self-start">${p.role}</span>` : ''}
-      <div class="grid grid-cols-3 gap-2 text-center border-t border-outline-variant/10 pt-3">
+      <div class="grid grid-cols-${statCols.length} gap-2 text-center border-t border-outline-variant/10 pt-3">
+        ${statCols.map(s => `
         <div>
-          <div class="font-bold text-sm text-on-surface">${kd}</div>
-          <div class="font-label-caps text-label-caps text-on-surface-variant">K/D</div>
-        </div>
-        <div>
-          <div class="font-bold text-sm text-on-surface">${adr}</div>
-          <div class="font-label-caps text-label-caps text-on-surface-variant">ADR</div>
-        </div>
-        <div>
-          <div class="font-bold text-sm text-on-surface">${maps}</div>
-          <div class="font-label-caps text-label-caps text-on-surface-variant">Maps</div>
-        </div>
+          <div class="font-bold text-sm text-on-surface">${s.value}</div>
+          <div class="font-label-caps text-label-caps text-on-surface-variant">${s.label}</div>
+        </div>`).join('')}
       </div>
-      ${extraLine}
     </div>
   </div>`;
 }

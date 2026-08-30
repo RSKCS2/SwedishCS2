@@ -73,12 +73,6 @@
       </div>
     </div>
     <div class="bg-deep-navy rounded-xl p-4 border border-outline-variant/10">
-      <h4 class="font-bold text-lg mb-3">Upcoming Tournaments</h4>
-      <ul id="sidebar-tournaments" class="flex flex-col gap-3">
-        <li class="font-metadata text-metadata text-on-surface-variant">Loading…</li>
-      </ul>
-    </div>
-    <div class="bg-deep-navy rounded-xl p-4 border border-outline-variant/10">
       <h4 class="font-bold text-lg mb-3">News Feed</h4>
       <div id="sidebar-news" class="flex flex-col gap-3 font-metadata text-metadata text-on-surface-variant">Loading…</div>
     </div>
@@ -363,25 +357,6 @@ function renderSidebar(sweUpcoming) {
       }).join('')
     : `<li class="font-metadata text-metadata text-on-surface-variant">No player data yet.</li>`;
   document.getElementById('sidebar-players').innerHTML = playersHtml;
-
-  const seenTournaments = new Map();
-  sweUpcoming.forEach(m => {
-    const name = m.tournament?.name || m.league?.name;
-    if (!name) return;
-    const existing = seenTournaments.get(name);
-    if (!existing || new Date(m.begin_at) < new Date(existing)) seenTournaments.set(name, m.begin_at);
-  });
-  const tournaments = [...seenTournaments.entries()].sort((a, b) => new Date(a[1]) - new Date(b[1])).slice(0, 5);
-  document.getElementById('sidebar-tournaments').innerHTML = tournaments.length
-    ? tournaments.map(([name, date]) => `
-      <li class="flex items-center gap-3">
-        <div class="w-8 h-8 bg-surface-container-highest rounded flex items-center justify-center text-swedish-gold text-xs font-bold shrink-0">${name.slice(0, 2).toUpperCase()}</div>
-        <div class="min-w-0">
-          <div class="font-bold text-sm truncate">${name}</div>
-          <div class="font-metadata text-metadata text-on-surface-variant/70">${new Date(date).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}</div>
-        </div>
-      </li>`).join('')
-    : `<li class="font-metadata text-metadata text-on-surface-variant">Nothing scheduled.</li>`;
 }
 
 // Fragbite CS2 news — fetched via ensureFragbiteNews() (see shared.js),

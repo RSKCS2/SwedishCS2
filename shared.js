@@ -96,8 +96,25 @@ async function getSessionToken(forceRefresh = false) {
 }
 
 // ── LOCAL STORAGE CACHE ───────────────────────────────────────────────────
+// swe_history_* has no upper bound (mergeHistoryData never evicts, see
+// shared.js's ensureMatchHistory), so on a long-lived browser profile it
+// can grow large enough to eat the whole localStorage quota. When that
+// happens every OTHER cacheSet call in the same origin — including small,
+// important ones like the Swedish roster counts (swe_players_v2) — was
+// failing silently, forcing a full re-fetch on every single page load.
+// If a write hits quota, clear the one cache that's actually big enough
+// to cause that and retry once, so the small caches keep working even on
+// a profile where history has piled up.
 function cacheSet(key, data) {
-  try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data })); } catch(_) {}
+  try {
+    localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data }));
+  } catch(e) {
+    if (key.startsWith('swe_history_')) return;
+    try {
+      Object.keys(localStorage).filter(k => k.startsWith('swe_history_')).forEach(k => localStorage.removeItem(k));
+      localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data }));
+    } catch(_) {}
+  }
 }
 function cacheGet(key, maxAgeMs) {
   try {
@@ -821,7 +838,12 @@ function teamLogo(t, cls = 'team-logo') {
   if (t?.id && (t.image_url || t.logoUrl)) cacheLogoFromTeam(t);
   if (url)
     return `<img class="${cls}" src="${url}" alt="${name}" loading="lazy" onerror="this.style.display='none'" />`;
-  return `<div class="${cls}-ph">${name[0].toUpperCase()}</div>`;
+  // No image: a plain fill box using the same classes the <img> would
+  // have gotten, so sizing/rounding still line up. (Previously this
+  // appended "-ph" to the end of the whole class string, which mangled
+  // multi-class Tailwind lists into one bogus class and rendered an
+  // unstyled letter floating in the corner instead of a placeholder.)
+  return `<div class="${cls} bg-surface-container-highest" aria-label="${name}"></div>`;
 }
 
 function formatMapName(raw) {
