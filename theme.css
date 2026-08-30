@@ -73,41 +73,33 @@ body {
 }
 
 /* Medal treatment for #1 / #2 / #3 cards on the Teams and Players pages.
-   .rank-shine adds a diagonal light sweep across the card on a loop. */
+   Backgrounds are tinted metal (gold/silver/bronze), not the site's usual
+   navy — the base color itself carries the medal, not just a corner
+   gradient over blue. .rank-shine is a fixed diagonal highlight baked
+   into the background (no animation, no looping "flash"). */
 .rank-gold {
   border-color: #E6C200 !important;
-  background: linear-gradient(135deg, rgba(230, 194, 0, 0.16), transparent 55%), #002244;
-  box-shadow: 0 0 26px 0 rgba(230, 194, 0, 0.25);
+  background:
+    linear-gradient(115deg, transparent 0%, transparent 38%, rgba(255,255,255,0.16) 46%, transparent 54%, transparent 100%),
+    linear-gradient(155deg, #6b5800 0%, #3a3000 38%, #1c1700 75%, #100d00 100%);
+  box-shadow: 0 0 26px 0 rgba(230, 194, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 .rank-silver {
   border-color: #C7CDD6 !important;
-  background: linear-gradient(135deg, rgba(199, 205, 214, 0.14), transparent 55%), #002244;
-  box-shadow: 0 0 22px 0 rgba(199, 205, 214, 0.18);
+  background:
+    linear-gradient(115deg, transparent 0%, transparent 38%, rgba(255,255,255,0.18) 46%, transparent 54%, transparent 100%),
+    linear-gradient(155deg, #565d68 0%, #363b42 38%, #202327 75%, #131518 100%);
+  box-shadow: 0 0 22px 0 rgba(199, 205, 214, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 .rank-bronze {
   border-color: #CD7F32 !important;
-  background: linear-gradient(135deg, rgba(205, 127, 50, 0.16), transparent 55%), #002244;
-  box-shadow: 0 0 22px 0 rgba(205, 127, 50, 0.18);
+  background:
+    linear-gradient(115deg, transparent 0%, transparent 38%, rgba(255,255,255,0.16) 46%, transparent 54%, transparent 100%),
+    linear-gradient(155deg, #6e4318 0%, #46290e 38%, #251506 75%, #150c04 100%);
+  box-shadow: 0 0 22px 0 rgba(205, 127, 50, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 .rank-badge-gold   { background: linear-gradient(135deg, #FFE680, #E6C200) !important; color: #002244 !important; }
 .rank-badge-silver { background: linear-gradient(135deg, #F1F3F6, #B8C0CC) !important; color: #002244 !important; }
 .rank-badge-bronze { background: linear-gradient(135deg, #E3A469, #B5702F) !important; color: #002244 !important; }
 
 .rank-shine { position: relative; overflow: hidden; }
-.rank-shine::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -60%;
-  width: 35%;
-  height: 100%;
-  background: linear-gradient(115deg, transparent, rgba(255, 255, 255, 0.22), transparent);
-  transform: skewX(-20deg);
-  animation: swe-shine 3.4s ease-in-out infinite;
-  pointer-events: none;
-}
-@keyframes swe-shine {
-  0%   { left: -60%; }
-  55%  { left: 130%; }
-  100% { left: 130%; }
-}

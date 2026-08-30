@@ -108,13 +108,38 @@ async function getSessionToken(forceRefresh = false) {
 function cacheSet(key, data) {
   try {
     localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data }));
-  } catch(e) {
-    if (key.startsWith('swe_history_')) return;
-    try {
-      Object.keys(localStorage).filter(k => k.startsWith('swe_history_')).forEach(k => localStorage.removeItem(k));
-      localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data }));
-    } catch(_) {}
+    return;
+  } catch(e) { /* quota hit — handled below */ }
+
+  // swe_history_* only ever grows (mergeHistoryData never evicts), so once
+  // the full history JSON outgrows the browser's localStorage quota, this
+  // write — and every write after it, forever, since the array never gets
+  // smaller — was silently dropped by the `return` below. ensureMatchHistory()
+  // still marks the walk as "fresh" whether or not the persist actually
+  // landed, so every later page load trusted whatever snapshot happened to
+  // be the last one that fit — frozen at that size with no error and no
+  // visible sign it had stopped growing (this is what produced the oddly
+  // exact-looking match/page counts on the history page).
+  // Fix: on quota failure, trim from the tail — matches are stored
+  // newest-first — and retry with progressively smaller slices instead of
+  // giving up, so the newest matches always keep getting persisted even
+  // once the very oldest ones no longer fit.
+  if (key.startsWith('swe_history_') && Array.isArray(data)) {
+    let trimmed = data;
+    for (let i = 0; i < 10 && trimmed.length > 50; i++) {
+      trimmed = trimmed.slice(0, Math.floor(trimmed.length * 0.8));
+      try {
+        localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data: trimmed }));
+        return;
+      } catch(_) { /* still too big, trim further */ }
+    }
+    return; // couldn't fit even a small slice — give up quietly
   }
+
+  try {
+    Object.keys(localStorage).filter(k => k.startsWith('swe_history_')).forEach(k => localStorage.removeItem(k));
+    localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data }));
+  } catch(_) {}
 }
 function cacheGet(key, maxAgeMs) {
   try {
@@ -626,6 +651,13 @@ function normPlayerNameFE(name) {
 // Players" list.
 const TIER_ORDER = { d: 1, c: 2, b: 3, a: 4, s: 5 };
 
+// How much a team's competition tier is allowed to drag a player's rating
+// up or down, from 0 (tier ignored entirely — pure K/D + ADR + sample
+// size) to 1 (full effect, tier weight applied directly as before). This
+// is the one knob to turn: lower it to let raw stats matter more, raise
+// it to weight the competition tier more heavily.
+const TIER_INFLUENCE = 0.35;
+
 // A team's tier weight is the *best* (highest) tier tournament they're
 // seen competing in within the given match list — one S-tier appearance
 // still says more about a team's level than a stack of D-tier bracket
@@ -671,7 +703,12 @@ function playerRating(stat, tierWeight = 0.5) {
   const kdComponent  = stat.kd_ratio || 0;    // typically ~0.5–2.0
   const adrComponent = (stat.adr || 0) / 100; // typically ~0.5–1.2
   const rawScore = kdComponent * 0.5 + adrComponent * 0.5;
-  return rawScore * tierWeight * confidence;
+  // Blend tierWeight toward 1 (no-op) by TIER_INFLUENCE, so raw stats keep
+  // more of their own weight instead of being multiplied by tierWeight
+  // directly. At TIER_INFLUENCE = 1 this is identical to the old formula;
+  // at 0 the tier has no effect at all.
+  const effectiveTierWeight = 1 - TIER_INFLUENCE * (1 - tierWeight);
+  return rawScore * effectiveTierWeight * confidence;
 }
 
 // Sorts players by playerRating (desc). Players with no recorded stats
