@@ -329,8 +329,8 @@ function renderPlayerCard(p, position) {
     <div class="h-48 ${medal ? '' : 'bg-surface-container-high'} relative overflow-hidden">
       ${teamLogo({ image_url: p.image_url, name: p.name }, 'w-full h-full object-contain')}
       <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-deep-navy/90 to-transparent px-4 pt-8 pb-2">
-        <h3 class="font-body-md text-body-md text-on-surface font-bold m-0 truncate">${p.name || '?'}</h3>
-        <p class="player-meta-badge px-2 py-1 rounded-md font-metadata text-metadata text-on-surface-variant truncate${rankBadgeTitle ? ' cursor-help' : ''}"${rankBadgeTitle ? ` title="${rankBadgeTitle}"` : ''}>${teamFlagLine ? teamFlagLine + ' ' : ''}${p.current_team?.name || 'Free agent'}${rankBadgeValue ? ` #${rankBadgeValue}` : ''}</p>
+        <h3 class="player-meta-badge font-body-md text-body-md text-on-surface font-bold m-0 truncate">${p.name || '?'}</h3>
+        <p class="player-meta-badge font-metadata text-metadata text-on-surface-variant truncate${rankBadgeTitle ? ' cursor-help' : ''}"${rankBadgeTitle ? ` title="${rankBadgeTitle}"` : ''}>${teamFlagLine ? teamFlagLine + ' ' : ''}${p.current_team?.name || 'Free agent'}${rankBadgeValue ? ` #${rankBadgeValue}` : ''}</p>
       </div>
     </div>
     <div class="p-4 flex flex-col gap-3 flex-1">
