@@ -10,6 +10,9 @@
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <script src="tailwind-config.js"></script>
 <link rel="stylesheet" href="theme.css" />
+<style>
+  .period-tab[aria-pressed="true"] { background: rgba(230, 194, 0, 0.15); border-color: #E6C200; color: #e1e2e7; }
+</style>
 
 <!-- CSP relaxed: allow Turnstile and data: images -->
 <meta http-equiv="Content-Security-Policy" content="default-src *; script-src * 'unsafe-inline' 'unsafe-eval'; connect-src *; img-src * data:; style-src * 'unsafe-inline';">
@@ -68,21 +71,35 @@
         <h1 class="font-display-lg text-display-lg text-on-surface">Swedish Players</h1>
         <p class="text-on-surface-variant font-body-md text-body-md mt-2">Every tracked SE-nationality CS2 player</p>
       </div>
-      <div class="flex flex-wrap gap-2 bg-deep-navy p-2 rounded-lg border border-outline-variant/20">
-        <select id="team-filter" onchange="onTeamFilter(this.value)"
-          class="bg-surface-container-high border-none text-on-surface text-sm rounded-md py-1.5 pl-3 pr-8 focus:ring-1 focus:ring-swedish-gold">
-          <option value="">All Teams</option>
-        </select>
-        <select id="period-filter" onchange="onPeriodFilter(this.value)"
-          class="bg-surface-container-high border-none text-on-surface text-sm rounded-md py-1.5 pl-3 pr-8 focus:ring-1 focus:ring-swedish-gold">
-          <option value="1" selected>This Month</option>
-          <option value="3">3 Months</option>
-          <option value="6">6 Months</option>
-          <option value="9">9 Months</option>
-          <option value="12">This Year</option>
-          <option value="1200">All Time</option>
-        </select>
-      </div>
+    </div>
+
+    <div class="bg-deep-navy rounded-xl p-4 border border-outline-variant/20 flex flex-wrap gap-2 items-center">
+      <span class="font-label-caps text-label-caps text-on-surface-variant mr-2">PERIOD:</span>
+      <div id="period-tabs" class="flex flex-wrap gap-2"></div>
+    </div>
+
+    <div id="custom-date-range" class="hidden bg-deep-navy rounded-xl p-4 border border-outline-variant/20 flex flex-wrap gap-4 items-center">
+      <span class="font-label-caps text-label-caps text-on-surface-variant">CUSTOM RANGE:</span>
+      <label class="flex items-center gap-2 text-sm text-on-surface-variant">
+        From
+        <input id="custom-date-start" type="date"
+          class="bg-surface-container-high border border-outline-variant/30 text-on-surface text-sm rounded-md py-1.5 px-2 focus:outline-none focus:border-swedish-gold"
+          onchange="onCustomDateChange()" />
+      </label>
+      <label class="flex items-center gap-2 text-sm text-on-surface-variant">
+        To
+        <input id="custom-date-end" type="date"
+          class="bg-surface-container-high border border-outline-variant/30 text-on-surface text-sm rounded-md py-1.5 px-2 focus:outline-none focus:border-swedish-gold"
+          onchange="onCustomDateChange()" />
+      </label>
+    </div>
+
+    <div class="bg-deep-navy rounded-xl p-4 border border-outline-variant/20 flex flex-wrap gap-3 items-center">
+      <span class="font-label-caps text-label-caps text-on-surface-variant mr-2">TEAM:</span>
+      <select id="team-filter" onchange="onTeamFilter(this.value)"
+        class="bg-surface-container-high border-none text-on-surface text-sm rounded-md py-1.5 pl-3 pr-8 focus:ring-1 focus:ring-swedish-gold">
+        <option value="">All Teams</option>
+      </select>
     </div>
 
     <div id="content" class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -110,16 +127,34 @@
 <div id="turnstile-container"></div>
 <script src="shared.js"></script>
 <script>
+const PERIODS = [
+  ['month',  'This Month'],
+  ['3m',     '3 Months'],
+  ['week',   'This Week'],
+  ['day',    'Today'],
+  ['6m',     '6 Months'],
+  ['9m',     '9 Months'],
+  ['year',   'This Year'],
+  ['all',    'All Time'],
+  ['custom', 'Custom Range'],
+];
+
 let allPlayers = [];
 let playerQuery = '';
 let teamFilterId = '';
-let periodMonths = 1;
+let periodKey = 'month';
+let customStart = '';
+let customEnd = '';
 let teamRankMap = {};
 let historyMatches = [];
 let playerStatRows = [];
 let playerStatMap = {};
 
 window.addEventListener('DOMContentLoaded', async () => {
+  document.getElementById('period-tabs').innerHTML = PERIODS.map(([key, label]) => `
+    <button class="period-tab font-label-caps text-label-caps px-4 py-2 rounded border border-outline-variant/30 text-on-surface-variant hover:border-swedish-gold transition-colors"
+      aria-pressed="${key === periodKey}" onclick="setPeriod('${key}')">${label}</button>`).join('');
+
   try {
     await ensureSwedishData();
     allPlayers = getSwedishPlayers().filter(p => (p.role || '').toLowerCase() !== 'coach');
@@ -173,8 +208,19 @@ function onTeamFilter(id) {
   renderPlayers();
 }
 
-function onPeriodFilter(months) {
-  periodMonths = parseInt(months, 10);
+function setPeriod(key) {
+  periodKey = key;
+  document.querySelectorAll('#period-tabs .period-tab').forEach(btn => btn.setAttribute('aria-pressed', 'false'));
+  event.target.setAttribute('aria-pressed', 'true');
+  document.getElementById('custom-date-range').classList.toggle('hidden', key !== 'custom');
+  recomputeRanks();
+  recomputeStats();
+  renderPlayers();
+}
+
+function onCustomDateChange() {
+  customStart = document.getElementById('custom-date-start').value;
+  customEnd   = document.getElementById('custom-date-end').value;
   recomputeRanks();
   recomputeStats();
   renderPlayers();
@@ -182,12 +228,14 @@ function onPeriodFilter(months) {
 
 function recomputeStats() {
   if (!playerStatRows.length) { playerStatMap = {}; return; }
-  playerStatMap = buildPlayerStatProfiles(playerStatRows, periodMonths, allPlayers);
+  const { start, end } = computePeriodRange(periodKey, customStart, customEnd);
+  playerStatMap = buildPlayerStatProfiles(playerStatRows, start, allPlayers, end);
 }
 
 function recomputeRanks() {
   if (!historyMatches.length) { teamRankMap = {}; return; }
-  const profiles = buildTeamProfiles(historyMatches, periodMonths);
+  const { start, end } = computePeriodRange(periodKey, customStart, customEnd);
+  const profiles = buildTeamProfiles(historyMatches, start, end);
   const ranked = rankTeamProfiles(profiles);
   teamRankMap = {};
   ranked.forEach(p => { teamRankMap[String(p.id)] = p.rank; });

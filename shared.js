@@ -351,9 +351,8 @@ async function ensureMatchHistory() {
   return matches;
 }
 
-function buildTeamProfiles(matches, cutoffMonths = 3) {
+function buildTeamProfiles(matches, cutoff = monthsAgo(3), end = null) {
   const profiles = {};
-  const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - cutoffMonths);
 
   matches.forEach(m => {
     const t1 = m.opponents?.[0]?.opponent;
@@ -371,12 +370,65 @@ function buildTeamProfiles(matches, cutoffMonths = 3) {
       const oppMaps  = self.id === t1?.id ? t2Maps : t1Maps;
       const won = m.winner?.id === self.id;
       p.matches.push({ oppName: opp?.name || 'TBD', selfMaps, oppMaps, won, date: m.begin_at });
-      if (new Date(m.begin_at) >= cutoff) { if (won) p.wins3m++; else p.losses3m++; }
+      const d = new Date(m.begin_at);
+      if (d >= cutoff && (!end || d <= end)) { if (won) p.wins3m++; else p.losses3m++; }
     });
   });
 
   Object.values(profiles).forEach(p => p.matches.sort((a, b) => new Date(b.date) - new Date(a.date)));
   return profiles;
+}
+
+function monthsAgo(n) {
+  const d = new Date();
+  d.setMonth(d.getMonth() - n);
+  return d;
+}
+
+// Shared period-range logic — used by any page that needs to turn a period
+// key (plus optional custom bounds) into a concrete date range. Keys match
+// what history.html's period tabs already used, so behavior stays consistent
+// across pages.
+function computePeriodRange(key, customStart, customEnd) {
+  const now = new Date();
+  let start;
+  switch (key) {
+    case 'year':  start = new Date(now.getFullYear(), 0, 1); break;
+    case '9m':    start = new Date(now); start.setMonth(now.getMonth() - 9); break;
+    case '6m':    start = new Date(now); start.setMonth(now.getMonth() - 6); break;
+    case '3m':    start = new Date(now); start.setMonth(now.getMonth() - 3); break;
+    case 'month': start = new Date(now.getFullYear(), now.getMonth(), 1); break;
+    case 'week':  start = new Date(now); start.setDate(now.getDate() - now.getDay()); break;
+    case 'day':   start = new Date(now); start.setHours(0, 0, 0, 0); break;
+    case 'custom': {
+      const s = customStart ? new Date(customStart) : null;
+      const e = customEnd ? new Date(customEnd) : null;
+      if (e) e.setHours(23, 59, 59, 999);
+      return { start: s || new Date(0), end: e };
+    }
+    case 'all':
+    default: start = new Date(0);
+  }
+  return { start, end: null };
+}
+
+// Prevents a single trailing word (e.g. "Season", "C") from being stranded
+// alone on the last line of wrapped metadata text — ties the final two
+// words together with a non-breaking space.
+//
+// Context strings are usually several " · "-joined segments (league,
+// stage, BO format, etc.), e.g. "ESL Pro League Season 20 · Regular Season
+// · BO3". Only fixing the very end of the whole string used to leave
+// "Regular Season" and "Group C" free to wrap apart from each other since
+// neither sits at the true end — each segment needs its own last-two-words
+// tie so a short trailing word never wraps onto a line by itself.
+function noOrphan(text) {
+  if (!text) return text;
+  return text.split(' · ').map(segment => {
+    const idx = segment.lastIndexOf(' ');
+    if (idx === -1) return segment;
+    return segment.slice(0, idx) + '&nbsp;' + segment.slice(idx + 1);
+  }).join(' · ');
 }
 
 function rankTeamProfiles(profiles) {
@@ -471,14 +523,17 @@ function timeAgo(dateStr) {
   return `${days}d ago`;
 }
 
-function buildPlayerStatProfiles(rows, periodMonths, players = []) {
-  const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - periodMonths);
+function buildPlayerStatProfiles(rows, cutoff, players = [], end = null) {
   const nameToId = {};
   players.forEach(p => { if (p.name) nameToId[normPlayerNameFE(p.name)] = p.id; });
 
   const agg = {};
   rows.forEach(r => {
-    if (r.date && new Date(r.date) < cutoff) return;
+    if (r.date) {
+      const d = new Date(r.date);
+      if (d < cutoff) return;
+      if (end && d > end) return;
+    }
     const pid = r.player_id ?? (r.player_name ? nameToId[normPlayerNameFE(r.player_name)] : null);
     if (!pid) return;
     if (!agg[pid]) agg[pid] = { kills: 0, deaths: 0, adrSum: 0, adrCount: 0, maps: 0 };
