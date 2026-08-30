@@ -2,7 +2,7 @@
 
 **Live site:** https://rskcs2.github.io/SwedishCS2
 
-A try at an all in one place for follwing Swedish Counter-Strike 2 in Esports.
+A try at an all in one place for following Swedish Counter-Strike 2 in Esports.
 
 ---
 
