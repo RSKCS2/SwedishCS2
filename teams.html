@@ -39,10 +39,16 @@
         <span class="material-symbols-outlined text-lg">share</span>
       </button>
     </div>
-    <button id="mobile-menu-btn" type="button" onclick="toggleMobileMenu()" aria-expanded="false" aria-controls="mobile-menu" aria-label="Toggle navigation menu"
-      class="md:hidden w-9 h-9 flex items-center justify-center rounded-full bg-deep-navy border border-outline-variant/30 text-on-surface-variant">
-      <span class="material-symbols-outlined text-lg">menu</span>
-    </button>
+    <div class="flex items-center gap-2 md:hidden">
+      <button type="button" onclick="sharePage('SweCS2 · Teams')" aria-label="Share this page"
+        class="w-9 h-9 flex items-center justify-center rounded-full bg-deep-navy border border-outline-variant/30 text-on-surface-variant hover:text-swedish-gold hover:border-swedish-gold transition-colors shrink-0">
+        <span class="material-symbols-outlined text-lg">share</span>
+      </button>
+      <button id="mobile-menu-btn" type="button" onclick="toggleMobileMenu()" aria-expanded="false" aria-controls="mobile-menu" aria-label="Toggle navigation menu"
+        class="w-9 h-9 flex items-center justify-center rounded-full bg-deep-navy border border-outline-variant/30 text-on-surface-variant">
+        <span class="material-symbols-outlined text-lg">menu</span>
+      </button>
+    </div>
   </div>
 </nav>
 <div id="mobile-menu" class="hidden md:hidden bg-surface-blue/95 backdrop-blur-xl border-b border-outline-variant/20 px-container-padding py-3 flex flex-col gap-1 sticky top-16 z-40">
@@ -90,7 +96,7 @@
 
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <div id="turnstile-container"></div>
-<script src="shared.js?v=3"></script>
+<script src="shared.js?v=4"></script>
 <script>
 let allTeams = [];
 let teamQuery = '';

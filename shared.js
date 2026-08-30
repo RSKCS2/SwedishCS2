@@ -334,8 +334,23 @@ async function ensureMatchHistory() {
   const isStale   = Date.now() - lastFetch > HISTORY_STALE_MS;
   if (isStale || !matches.length) {
     try {
-      const pastList = await pandaFetch('/csgo/matches/past?per_page=100&include=opponents,results,games,winner', { bypassGuard: true });
-      const fetched  = pastList.filter(m => m.opponents?.length === 2 && (sweInfo(m.opponents[0]?.opponent) || sweInfo(m.opponents[1]?.opponent)));
+      // The Worker's KV_HISTORY_DATA keeps every match it has ever merged
+      // in (mergeHistoryData never evicts), so a single per_page=100 fetch
+      // only ever returned page 1 — the newest 100 matches — and every
+      // older match was permanently unreachable from the client, however
+      // deep the Worker's own cache actually went. Page through the full
+      // /csgo/matches/past result set the same way ensureSwedishData()
+      // already pages through /csgo/players, stopping once a page comes
+      // back short of a full 100.
+      const fetched = [];
+      let page = 1;
+      while (true) {
+        const pastPage = await pandaFetch(`/csgo/matches/past?per_page=100&page=${page}&include=opponents,results,games,winner`, { bypassGuard: true });
+        if (!pastPage.length) break;
+        fetched.push(...pastPage.filter(m => m.opponents?.length === 2 && (sweInfo(m.opponents[0]?.opponent) || sweInfo(m.opponents[1]?.opponent))));
+        if (pastPage.length < 100) break;
+        page++;
+      }
       const seen = new Set();
       matches = [...fetched, ...matches].filter(m => {
         if (seen.has(m.id)) return false;
