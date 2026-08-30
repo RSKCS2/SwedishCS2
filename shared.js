@@ -333,35 +333,49 @@ async function ensureMatchHistory() {
   const lastFetch = parseInt(localStorage.getItem(HISTORY_FETCH_KEY) || '0', 10);
   const isStale   = Date.now() - lastFetch > HISTORY_STALE_MS;
   if (isStale || !matches.length) {
-    try {
-      // The Worker's KV_HISTORY_DATA keeps every match it has ever merged
-      // in (mergeHistoryData never evicts), so a single per_page=100 fetch
-      // only ever returned page 1 — the newest 100 matches — and every
-      // older match was permanently unreachable from the client, however
-      // deep the Worker's own cache actually went. Page through the full
-      // /csgo/matches/past result set the same way ensureSwedishData()
-      // already pages through /csgo/players, stopping once a page comes
-      // back short of a full 100.
-      const fetched = [];
-      let page = 1;
-      while (true) {
-        const pastPage = await pandaFetch(`/csgo/matches/past?per_page=100&page=${page}&include=opponents,results,games,winner`, { bypassGuard: true });
-        if (!pastPage.length) break;
-        fetched.push(...pastPage.filter(m => m.opponents?.length === 2 && (sweInfo(m.opponents[0]?.opponent) || sweInfo(m.opponents[1]?.opponent))));
-        if (pastPage.length < 100) break;
-        page++;
+    // The Worker's KV_HISTORY_DATA keeps every match it has ever merged
+    // in (mergeHistoryData never evicts), so a single per_page=100 fetch
+    // only ever returned page 1 — the newest 100 matches — and every
+    // older match was permanently unreachable from the client, however
+    // deep the Worker's own cache actually went. Page through the full
+    // /csgo/matches/past result set the same way ensureSwedishData()
+    // already pages through /csgo/players, stopping once a page comes
+    // back short of a full 100.
+    //
+    // Each page is merged into `matches` (and persisted) as soon as it
+    // lands, instead of only after the whole walk finishes. Previously a
+    // single transient failure partway through (page 3 timing out, say)
+    // threw past the loop entirely and the catch below discarded every
+    // page already fetched in that run — on a first visit, or right after
+    // the swe_history_v3 cache had been cleared, that meant one flaky
+    // request could make history look completely "erased" even though
+    // most of it had just been fetched successfully.
+    let page = 1;
+    let pageFailed = false;
+    while (!pageFailed) {
+      let pastPage;
+      try {
+        pastPage = await pandaFetch(`/csgo/matches/past?per_page=100&page=${page}&include=opponents,results,games,winner`, { bypassGuard: true });
+      } catch(e) {
+        console.warn(`[SWE] Failed to load match history page ${page}:`, e);
+        pageFailed = true;
+        break;
       }
-      const seen = new Set();
-      matches = [...fetched, ...matches].filter(m => {
-        if (seen.has(m.id)) return false;
-        seen.add(m.id);
-        return true;
-      });
-      cacheSet(HISTORY_KEY, matches);
-      localStorage.setItem(HISTORY_FETCH_KEY, Date.now().toString());
-    } catch(e) {
-      console.warn('[SWE] Failed to load match history:', e);
+      if (!pastPage.length) break;
+      const relevant = pastPage.filter(m => m.opponents?.length === 2 && (sweInfo(m.opponents[0]?.opponent) || sweInfo(m.opponents[1]?.opponent)));
+      if (relevant.length) {
+        const seen = new Set(matches.map(m => m.id));
+        relevant.forEach(m => { if (!seen.has(m.id)) { matches.push(m); seen.add(m.id); } });
+        cacheSet(HISTORY_KEY, matches);
+      }
+      if (pastPage.length < 100) break;
+      page++;
     }
+    // Only mark the fetch as "fresh" if the walk actually completed — a
+    // page that failed partway through should make the very next visit
+    // retry right away instead of waiting out the full 2-hour staleness
+    // window with a possibly-incomplete result.
+    if (!pageFailed) localStorage.setItem(HISTORY_FETCH_KEY, Date.now().toString());
   }
   return matches;
 }
@@ -581,6 +595,80 @@ function buildPlayerStatProfiles(rows, cutoff, players = [], end = null) {
 
 function normPlayerNameFE(name) {
   return (name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+// ── PLAYER RATING (K/D + ADR, discounted by sample size and competition
+// tier) ──────────────────────────────────────────────────────────────────
+// Sorting players by raw K/D or ADR alone lets someone who only plays
+// D-tier qualifiers (against far weaker opposition, and often on a
+// handful of maps) outrank players putting up real numbers in S/A-tier
+// events. This combines K/D, ADR, sample size (maps played), and the tier
+// of competition their team has actually been facing into one comparable
+// score, used to rank both the Players page and the front page's "Top
+// Players" list.
+const TIER_ORDER = { d: 1, c: 2, b: 3, a: 4, s: 5 };
+
+// A team's tier weight is the *best* (highest) tier tournament they're
+// seen competing in within the given match list — one S-tier appearance
+// still says more about a team's level than a stack of D-tier bracket
+// wins, so "best seen" avoids punishing a strong team for also grinding
+// lower-tier qualifiers alongside their real events.
+function teamTierWeight(matches, teamId) {
+  if (!teamId) return 0.5;
+  let best = 0;
+  (matches || []).forEach(m => {
+    const t1 = m.opponents?.[0]?.opponent?.id;
+    const t2 = m.opponents?.[1]?.opponent?.id;
+    if (t1 !== teamId && t2 !== teamId) return;
+    const tier = TIER_ORDER[String(m.tournament?.tier || '').toLowerCase()];
+    if (tier && tier > best) best = tier;
+  });
+  // No tiered matches found for this team in the window: assume the
+  // middle of the scale rather than punishing (0) or rewarding (max) an
+  // absence of data.
+  return best ? best / 5 : 0.5;
+}
+
+function buildTeamTierMap(matches) {
+  const teamIds = new Set();
+  (matches || []).forEach(m => {
+    const t1 = m.opponents?.[0]?.opponent?.id;
+    const t2 = m.opponents?.[1]?.opponent?.id;
+    if (t1) teamIds.add(t1);
+    if (t2) teamIds.add(t2);
+  });
+  const map = {};
+  teamIds.forEach(id => { map[id] = teamTierWeight(matches, id); });
+  return map;
+}
+
+// A single comparable score per player. Rewards real production (K/D,
+// ADR) but discounts it by (a) how small the sample is — a hot streak
+// over 2 maps shouldn't outrank a full season — and (b) the tier of
+// competition, so stat-padding against weaker opposition doesn't outrank
+// solid performances against top-tier teams.
+function playerRating(stat, tierWeight = 0.5) {
+  if (!stat || !stat.maps_played) return 0;
+  const confidence  = Math.min(stat.maps_played / 10, 1); // ramps up over the first 10 maps
+  const kdComponent  = stat.kd_ratio || 0;    // typically ~0.5–2.0
+  const adrComponent = (stat.adr || 0) / 100; // typically ~0.5–1.2
+  const rawScore = kdComponent * 0.5 + adrComponent * 0.5;
+  return rawScore * tierWeight * confidence;
+}
+
+// Sorts players by playerRating (desc). Players with no recorded stats
+// score 0 and sink to the bottom, ordered alphabetically among themselves
+// so the tail of the list is still stable rather than shuffling on every
+// render.
+function rankPlayersByRating(players, statMap, tierMap) {
+  return (players || []).slice().sort((a, b) => {
+    const sa = statMap[a.id], sb = statMap[b.id];
+    const ta = a.current_team ? (tierMap[a.current_team.id] ?? 0.5) : 0.5;
+    const tb = b.current_team ? (tierMap[b.current_team.id] ?? 0.5) : 0.5;
+    const ra = playerRating(sa, ta), rb = playerRating(sb, tb);
+    if (rb !== ra) return rb - ra;
+    return (a.name || '').localeCompare(b.name || '');
+  });
 }
 
 // ── GRID QUERIES ──────────────────────────────────────────────────────────

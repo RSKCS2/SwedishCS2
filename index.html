@@ -27,6 +27,12 @@
         <a class="nav-link text-on-surface-variant font-medium hover:text-swedish-gold transition-colors duration-200 h-full flex items-center" href="players">Players</a>
       </nav>
     </div>
+    <div class="hidden md:flex items-center gap-2">
+      <button type="button" onclick="sharePage('SweCS2 · Live Scores')" aria-label="Share this page"
+        class="w-9 h-9 flex items-center justify-center rounded-full bg-deep-navy border border-outline-variant/30 text-on-surface-variant hover:text-swedish-gold hover:border-swedish-gold transition-colors shrink-0">
+        <span class="material-symbols-outlined text-lg">share</span>
+      </button>
+    </div>
     <div class="flex items-center gap-2 md:hidden">
       <button type="button" onclick="sharePage('SweCS2 · Live Scores')" aria-label="Share this page"
         class="w-9 h-9 flex items-center justify-center rounded-full bg-deep-navy border border-outline-variant/30 text-on-surface-variant hover:text-swedish-gold hover:border-swedish-gold transition-colors shrink-0">
@@ -122,20 +128,26 @@ async function loadNews() {
 }
 
 let historyMatches = [];
+let playerStatRows = [];
 
 async function fetchMatches() {
   try {
     await ensureSwedishData();
 
-    const [runningList, upcomingList, history] = await Promise.all([
+    const [runningList, upcomingList, history, statRows] = await Promise.all([
       pandaFetch('/csgo/matches/running?per_page=50&include=opponents,results,games,pick_bans'),
       pandaFetch('/csgo/matches/upcoming?per_page=30&sort=begin_at&include=opponents'),
       // Client-side only, served straight from the Worker's KV cache (no
       // PandaScore hit) — used purely for the head-to-head line on upcoming
-      // cards. A failure here shouldn't break the live scoreboard.
+      // cards and for the "Top Players" sidebar's competition-tier
+      // weighting. A failure here shouldn't break the live scoreboard.
       ensureMatchHistory().catch(e => { console.warn('[SWE] History unavailable for H2H:', e); return []; }),
+      // Also KV-backed, no live PandaScore hit — feeds real K/D/ADR into
+      // the "Top Players" sidebar instead of the old placeholder numbers.
+      ensurePlayerGameStats().catch(e => { console.warn('[SWE] Player stats unavailable for sidebar:', e); return []; }),
     ]);
     historyMatches = history || [];
+    playerStatRows = statRows || [];
 
     const sweRunning  = runningList.filter(hasSweTeam);
     const sweUpcoming = upcomingList.filter(hasSweTeam);
@@ -319,31 +331,33 @@ function renderUpcomingCard(match) {
   </article>`;
 }
 
-// Placeholder per-player stat line (K/D, ADR, multikill, headshot %) until
-// a real stats endpoint is wired into the Worker — deterministic per player
-// so numbers don't jump around between renders, not real match data.
-function _placeholderStats(seed) {
-  let h = 0;
-  for (let i = 0; i < String(seed).length; i++) h = (h * 31 + String(seed).charCodeAt(i)) >>> 0;
-  const kd  = (1.05 + (h % 60) / 100).toFixed(2);
-  const adr = (72 + (h % 35)).toFixed(1);
-  const mk  = 1 + (h % 4);
-  const hs  = 38 + (h % 25);
-  return { kd, adr, mk, hs };
-}
-
+// "Top Players This Month" — ranked by real K/D + ADR + sample size +
+// competition-tier score (rankPlayersByRating, see shared.js), not just
+// raw stats, so a player who only plays D-tier matches can't land at #1
+// over someone performing well against real competition.
 function renderSidebar(sweUpcoming) {
-  const players = getSwedishPlayers().slice(0, 5);
+  const { start, end } = computePeriodRange('month');
+  const periodMatches = historyMatches.filter(m => {
+    const d = new Date(m.begin_at);
+    return d >= start && (!end || d <= end);
+  });
+  const tierMap = buildTeamTierMap(periodMatches.length ? periodMatches : historyMatches);
+  const statMap = playerStatRows.length ? buildPlayerStatProfiles(playerStatRows, start, getSwedishPlayers(), end) : {};
+
+  const players = rankPlayersByRating(getSwedishPlayers(), statMap, tierMap)
+    .filter(p => statMap[p.id]?.maps_played)
+    .slice(0, 5);
+
   const playersHtml = players.length
     ? players.map(p => {
-        const s = _placeholderStats(p.id ?? p.name);
+        const s = statMap[p.id] || {};
         return `
       <li class="flex items-center gap-3">
         ${teamLogo({ image_url: p.image_url, name: p.name }, 'w-8 h-8 rounded-full object-cover bg-surface-container-highest')}
         <div class="flex-1 min-w-0">
           <div class="font-bold text-sm truncate">${p.name || '?'}</div>
           <div class="font-metadata text-metadata text-on-surface-variant/70 truncate">${p.current_team?.name || 'Free agent'}</div>
-          <div class="font-label-caps text-label-caps text-swedish-gold/90 mt-0.5">${s.kd} K/D · ${s.adr} ADR · ${s.mk}x MK · ${s.hs}% HS</div>
+          <div class="font-label-caps text-label-caps text-swedish-gold/90 mt-0.5">${s.kd_ratio ?? '—'} K/D · ${s.adr ?? '—'} ADR · ${s.maps_played ?? 0} maps</div>
         </div>
       </li>`;
       }).join('')

@@ -151,7 +151,7 @@ let teamFilterId = '';
 let periodKey = 'month';
 let customStart = '';
 let customEnd = '';
-let teamRankMap = {};
+let teamTierMap = {};
 let historyMatches = [];
 let playerStatRows = [];
 let playerStatMap = {};
@@ -172,9 +172,9 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     try {
       historyMatches = await ensureMatchHistory();
-      recomputeRanks();
+      recomputeTierMap();
     } catch(e) {
-      console.warn('[SWE] Could not compute player team ranks:', e);
+      console.warn('[SWE] Could not compute team competition tiers:', e);
     }
 
     try {
@@ -219,7 +219,7 @@ function setPeriod(key) {
   document.querySelectorAll('#period-tabs .period-tab').forEach(btn => btn.setAttribute('aria-pressed', 'false'));
   event.target.setAttribute('aria-pressed', 'true');
   document.getElementById('custom-date-range').classList.toggle('hidden', key !== 'custom');
-  recomputeRanks();
+  recomputeTierMap();
   recomputeStats();
   renderPlayers();
 }
@@ -227,7 +227,7 @@ function setPeriod(key) {
 function onCustomDateChange() {
   customStart = document.getElementById('custom-date-start').value;
   customEnd   = document.getElementById('custom-date-end').value;
-  recomputeRanks();
+  recomputeTierMap();
   recomputeStats();
   renderPlayers();
 }
@@ -238,13 +238,19 @@ function recomputeStats() {
   playerStatMap = buildPlayerStatProfiles(playerStatRows, start, allPlayers, end);
 }
 
-function recomputeRanks() {
-  if (!historyMatches.length) { teamRankMap = {}; return; }
+// Competition-tier weight per team, scoped to the selected period so it
+// stays consistent with playerStatMap above. Falls back to the full
+// history when the period is too narrow to contain any matches (e.g.
+// "Today"), so tier weight doesn't collapse to the neutral default just
+// because nothing was played in the last few hours.
+function recomputeTierMap() {
+  if (!historyMatches.length) { teamTierMap = {}; return; }
   const { start, end } = computePeriodRange(periodKey, customStart, customEnd);
-  const profiles = buildTeamProfiles(historyMatches, start, end);
-  const ranked = rankTeamProfiles(profiles);
-  teamRankMap = {};
-  ranked.forEach(p => { teamRankMap[String(p.id)] = p.rank; });
+  const periodMatches = historyMatches.filter(m => {
+    const d = new Date(m.begin_at);
+    return d >= start && (!end || d <= end);
+  });
+  teamTierMap = buildTeamTierMap(periodMatches.length ? periodMatches : historyMatches);
 }
 
 function renderPlayers() {
@@ -252,14 +258,11 @@ function renderPlayers() {
   if (teamFilterId) players = players.filter(p => String(p.current_team?.id) === String(teamFilterId));
   if (playerQuery) players = players.filter(p => (p.name || '').toLowerCase().includes(playerQuery));
 
-  players.sort((a, b) => {
-    const ra = a.current_team ? teamRankMap[String(a.current_team.id)] : null;
-    const rb = b.current_team ? teamRankMap[String(b.current_team.id)] : null;
-    if (ra && rb) return ra - rb;
-    if (ra) return -1;
-    if (rb) return 1;
-    return (a.name || '').localeCompare(b.name || '');
-  });
+  // Rank by a combined K/D + ADR + sample-size + competition-tier score
+  // (see rankPlayersByRating in shared.js) — not just team standing or
+  // name — so a player who only racks up stats in D-tier matches can't
+  // land at #1 over someone performing well against real competition.
+  players = rankPlayersByRating(players, playerStatMap, teamTierMap);
 
   if (!players.length) {
     document.getElementById('content').innerHTML = `
