@@ -11,6 +11,33 @@
  * KV Namespaces: MATCH_DATA
  */
 
+import { normalizeHLTVRanking } from './hltv-normalizer.js';
+
+// ── HLTV INTEGRATION ────────────────────────────────────────────────────
+// serviceUrl/sharedSecret are read from `env` on every call rather than
+// once at module scope — Workers module syntax only hands `env` to the
+// exported fetch/scheduled handlers, so a top-level `env.HLTV_SERVICE_URL`
+// reference would throw ReferenceError before the Worker ever served a
+// request.
+async function fetchHLTV(path, env, timeoutMs = 5000) {
+  const serviceUrl = env.HLTV_SERVICE_URL || 'http://localhost:3000';
+  const sharedSecret = env.HLTV_SHARED_SECRET || 'dev-secret';
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const res = await fetch(`${serviceUrl}${path}`, {
+      signal: controller.signal,
+      headers: { 'X-HLTV-Secret': sharedSecret },
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) return null;
+    return res.json();
+  } catch (e) {
+    console.warn(`[HLTV] Fetch failed: ${path}`, e.message);
+    return null;
+  }
+}
+
 const ALLOWED_ORIGINS = ['https://rskcs2.github.io'];
 const GRID_CENTRAL    = 'https://api-op.grid.gg/central-data/graphql';
 const GRID_LIVE       = 'https://api-op.grid.gg/live-data-feed/series-state/graphql';
@@ -2203,6 +2230,33 @@ async function handleFetch(request, env) {
       return new Response(JSON.stringify([]), {
         status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
       });
+    }
+
+    // /csgo/teams/ranking — HLTV primary, PandaScore fallback
+    if (path === '/csgo/teams/ranking') {
+      let ranking = await fetchHLTV('/api/teams/ranking', env);
+      if (ranking) {
+        const normalized = normalizeHLTVRanking(ranking);
+        return new Response(JSON.stringify(normalized), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', ...corsHeaders(origin) },
+        });
+      }
+      // Fall back to PandaScore if HLTV fails
+      try {
+        const ps = await fetchPandascoreWithPagination(
+          `${PANDA_BASE}/csgo/teams/ranking?per_page=50`,
+          env.PANDASCORE_TOKEN, 1
+        );
+        return new Response(JSON.stringify(ps || []), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', ...corsHeaders(origin) },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: 'Rankings unavailable' }), {
+          status: 503, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+        });
+      }
     }
 
     // /csgo/season-totals — GRID series-aggregated per-player totals (see
