@@ -1,42 +1,16 @@
 /**
- * SWE CS2 Tracker — Cloudflare Worker
+ * SWE CS2 Tracker - Cloudflare Worker
  *
- * GET  /csgo/*   → KV cache, with fallback to live PandaScore if cache empty
- * POST /central  → KV cache (live_data)
- * POST /live     → KV cache (live_data)
+ * GET  /csgo/*   -> KV cache only; no esports API calls from visitors
+ * GET  /news     -> KV cache only; refreshed by the scheduled handler
+ * POST /central  -> KV cache (live_data)
+ * POST /live     -> KV cache (live_data)
  *
- * Scheduled handler (cron): Fetches from PandaScore + GRID, stores in KV
+ * Scheduled handler (cron): Fetches from PandaScore + GRID + Fragbite, stores in KV
  *
  * Secrets: PANDASCORE_TOKEN, GRID_TOKEN, WORKER_SECRET, TURNSTILE_SECRET
  * KV Namespaces: MATCH_DATA
  */
-
-import { normalizeHLTVRanking } from './hltv-normalizer.js';
-
-// ── HLTV INTEGRATION ────────────────────────────────────────────────────
-// serviceUrl/sharedSecret are read from `env` on every call rather than
-// once at module scope — Workers module syntax only hands `env` to the
-// exported fetch/scheduled handlers, so a top-level `env.HLTV_SERVICE_URL`
-// reference would throw ReferenceError before the Worker ever served a
-// request.
-async function fetchHLTV(path, env, timeoutMs = 5000) {
-  const serviceUrl = env.HLTV_SERVICE_URL || 'http://localhost:3000';
-  const sharedSecret = env.HLTV_SHARED_SECRET || 'dev-secret';
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-    const res = await fetch(`${serviceUrl}${path}`, {
-      signal: controller.signal,
-      headers: { 'X-HLTV-Secret': sharedSecret },
-    });
-    clearTimeout(timeoutId);
-    if (!res.ok) return null;
-    return res.json();
-  } catch (e) {
-    console.warn(`[HLTV] Fetch failed: ${path}`, e.message);
-    return null;
-  }
-}
 
 const ALLOWED_ORIGINS = ['https://rskcs2.github.io'];
 const GRID_CENTRAL    = 'https://api-op.grid.gg/central-data/graphql';
@@ -56,16 +30,18 @@ const KV_STATS_DONE      = 'player_stats_done';
 const KV_GRID_CS2_TITLE_ID = 'grid_cs2_title_id';
 const KV_STATS_MIGRATION = 'player_stats_migration_version';
 const KV_NEWS_DATA       = 'fragbite_news';
-// Discovered (not guessed) GRID <-> PandaScore identity mappings — see the
+const KV_NEWS_RETRY_AFTER = 'fragbite_news_retry_after'; // throttle retry attempts after a failed initial fetch
+// Discovered (not guessed) GRID <-> PandaScore identity mappings - see the
 // "GRID PROVIDER / TEAM ID DISCOVERY" section below for how these get
 // populated. Both are single blobs (one KV key each, holding every team)
 // rather than one key per team, to keep this at effectively zero ongoing
 // write cost once populated.
 const KV_GRID_PANDASCORE_PROVIDER = 'grid_pandascore_provider_name';
 const KV_GRID_TEAM_ID_MAP = 'grid_team_id_map'; // { [pandaTeamId]: gridTeamId }
-const KV_SEASON_TOTALS   = 'grid_season_totals'; // { [playerKey]: {...} } — GRID series-aggregated totals
+const KV_SEASON_TOTALS   = 'grid_season_totals'; // { [playerKey]: {...} } - GRID series-aggregated totals
+const KV_ROSTER_REFRESH_CURSOR = 'team_roster_refresh_cursor'; // round-robin cursor for low-volume scheduled roster refreshes
 // Each non-GRID-native game in a batch costs up to 2 fetch() subrequests
-// (1 PandaScore + 1 GRID series-state), not 3 — the GRID central
+// (1 PandaScore + 1 GRID series-state), not 3 - the GRID central
 // series-discovery query used to be a 3rd per-game fetch, but it's now
 // shared across the whole batch via makeGridSeriesCache (at most one
 // fetch per distinct day in the batch, occasionally two if a day's tight
@@ -78,16 +54,21 @@ const STATS_BATCH_SIZE   = 15;
 
 // ── KV WRITE SAFETY / BUDGET ─────────────────────────────────────────────
 // Cloudflare's free KV tier hard-caps writes at 1,000/day per namespace,
-// resetting 00:00 UTC. Two defenses, used everywhere a scheduled tick
-// writes to KV:
-//  1. safePut() — every .put() goes through this. A quota rejection (or any
-//     other KV error) is logged and swallowed instead of throwing, so it
-//     can't abort the rest of the tick (previously an uncaught rejection
-//     here jumped straight to handleScheduled's outer catch, skipping
-//     everything after it in the same run — including player stats).
-//  2. putIfChanged() — skips the write entirely when the serialized value
-//     is byte-identical to what's already stored. Costs a read, but the
-//     free tier's read budget (100k/day) is generous by comparison.
+// resetting at 00:00 UTC. The planned daily budget is roughly:
+//   live snapshots: 480 writes (one every three-minute cron tick)
+//   history cursor/data: up to ~120 writes
+//   player stats queue/done/data: up to ~180 writes
+//   scheduled roster batch: up to ~40 writes in an extreme all-changed case
+//   news: 6 writes for four-hour refreshes, plus rare failure-throttle writes
+// Team metadata keys are write-on-change. Roster/news requests from visitors
+// are forbidden. This leaves headroom, but the limit is still finite; logs
+// below distinguish writes that succeeded, were skipped, or failed.
+//
+//  1. safePut() - every .put() goes through this. A quota rejection (or any
+//     other KV error) is logged and returned instead of aborting the tick.
+//  2. putIfChanged() - skips the write entirely when the serialized value
+//     is byte-identical to what's already stored. It costs a read, but the
+//     free tier's read budget is 100k/day and this namespace is far below it.
 async function safePut(env, key, value, opts) {
   try {
     await env.MATCH_DATA.put(key, value, opts);
@@ -99,16 +80,32 @@ async function safePut(env, key, value, opts) {
 }
 
 async function putIfChanged(env, key, valueObj, opts) {
-  const serialized = JSON.stringify(valueObj);
+  const serialized = typeof valueObj === 'string' ? valueObj : JSON.stringify(valueObj);
   try {
     const existing = await env.MATCH_DATA.get(key);
     if (existing === serialized) return false;
-  } catch (_) { /* fall through and attempt the write anyway */ }
-  return safePut(env, key, serialized, opts);
+  } catch (err) {
+    // A KV read failure should not silently masquerade as an unchanged key.
+    // Try the write anyway, but make the degraded check visible in the logs.
+    console.warn(`[KV] get(${key}) failed during putIfChanged: ${err.message}; attempting write`);
+  }
+  return (await safePut(env, key, serialized, opts)) ? true : null;
+}
+
+// Runs one step of the cron. A failure is logged and returns the fallback,
+// so one broken step can never stop the steps after it (this is what keeps
+// the live_data write alive every single tick).
+async function step(label, fn, fallback = null) {
+  try {
+    return await fn();
+  } catch (err) {
+    console.error(`[CRON] Step "${label}" failed: ${err.message}`);
+    return fallback;
+  }
 }
 
 // Background tasks (team metadata, history rotation, player-stats queue)
-// don't need to run every tick — only the live scoreboard does. Gating them
+// don't need to run every tick - only the live scoreboard does. Gating them
 // to a fraction of ticks keeps total daily writes under the 1,000 cap even
 // during a full slate of live matches. With the cron at */3 (480 ticks/day),
 // running heavy tasks 1 tick in 8 (~every 24 min) budgets worst-case to:
@@ -123,7 +120,7 @@ async function putIfChanged(env, key, valueObj, opts) {
 // Team-metadata/history and player-stats used to share the same "heavy"
 // tick. They're now split onto two different tick offsets (see
 // isMetadataTick / isStatsTick, near handleScheduled) so their fetch()
-// subrequests don't stack up in the same invocation — see the comment
+// subrequests don't stack up in the same invocation - see the comment
 // above handleScheduled for why that matters.
 const HEAVY_TASK_EVERY_N_TICKS = 8;
 const CRON_INTERVAL_MINUTES = 3; // must match the cron trigger (*/3 * * * *)
@@ -203,9 +200,15 @@ async function isAuthorized(request, env) {
 // page 1 looked identical to "PandaScore says there are 0 results" and
 // every GRID fallback that depended on `=== null` silently never fired.
 // A failure on page 2+ (after page 1 already returned real data) still
-// returns the partial results as an array — that's a genuine partial
+// returns the partial results as an array - that's a genuine partial
 // dataset, not a total failure, and is better than discarding it.
 async function fetchPandascoreWithPagination(url, token, maxPages = 999) {
+  // Never send malformed requests with a missing token. Scheduled callers can
+  // preserve their last-known-good KV data until credentials are configured.
+  if (!token) {
+    console.warn('[PANDA] Request skipped because PANDASCORE_TOKEN is not configured');
+    return null;
+  }
   const results = [];
   let page = 1;
   let hasMore = true;
@@ -217,7 +220,12 @@ async function fetchPandascoreWithPagination(url, token, maxPages = 999) {
         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
       });
       if (!res.ok) {
-        console.error(`PandaScore request failed: ${res.status} (page ${page})`);
+        if (res.status === 429) {
+          const retryAfter = res.headers.get('Retry-After');
+          console.warn(`PandaScore rate limit reached on page ${page}; Retry-After=${retryAfter || 'not provided'}. No immediate retry will be attempted.`);
+        } else {
+          console.error(`PandaScore request failed: ${res.status} (page ${page})`);
+        }
         if (page === 1) failedFirstPage = true;
         hasMore = false;
         break;
@@ -236,21 +244,15 @@ async function fetchPandascoreWithPagination(url, token, maxPages = 999) {
   return results;
 }
 
-// ── SINGLE TEAM ROSTER (with KV cache + durable stale fallback + GRID) ──
-// `team_roster_{id}`       → fresh copy, expires after TEAM_ROSTER_CACHE_TTL_S
-// `team_roster_stale_{id}` → same payload, never expires, only overwritten
-//                            on a new successful fetch. Used as a fallback
-//                            when PandaScore is down and the fresh key has
-//                            already expired.
-// If neither cache has anything, falls back to a GRID-derived roster
-// (see fetchGridTeamRosterByName) before finally giving up. GRID has no
-// PandaScore-compatible team ID, so it needs to search by name. The caller
-// can pass a `nameHint` (the client already has current_team.name on hand);
-// if omitted, resolveTeamNameFromId() is tried as a last resort, but that
-// depends on KV_LIVE_DATA already containing this team, which will not be
-// true during a PandaScore outage that also blocked the scheduled job.
-const TEAM_ROSTER_CACHE_TTL_S = 24 * 60 * 60;
-const GRID_ROSTER_CACHE_TTL_S = 6 * 60 * 60; // shorter TTL: less authoritative than Panda
+// ── SINGLE TEAM ROSTER (KV-only visitor path + scheduled refresh) ─────────
+// `team_roster_{id}`       -> latest cron-refreshed copy; no TTL
+// `team_roster_stale_{id}` -> durable last-known-good copy, never expires
+// Visitor requests only read these keys. Missing/invalidated keys are refreshed
+// by cron, never by a page view. The legacy GRID roster fallback helpers below
+// are retained for reference but are not called from the visitor path; the
+// scheduled refresh intentionally uses one PandaScore request per team to keep
+// free-provider usage low.
+const GRID_ROSTER_CACHE_TTL_S = 6 * 60 * 60; // used only by the legacy GRID fallback helpers below
 
 async function tryGridRosterFallback(teamId, env, nameHint = null) {
   if (!env.GRID_TOKEN) return null;
@@ -259,7 +261,7 @@ async function tryGridRosterFallback(teamId, env, nameHint = null) {
 
   // 1) Cheapest and most reliable path: a mapping already *confirmed* via
   // GRID's own externalLinks field on a previous run (see
-  // maybeCachePandaGridTeamMapping). No guessing, no fuzzy name matching —
+  // maybeCachePandaGridTeamMapping). No guessing, no fuzzy name matching -
   // just a direct ID lookup. This is what most calls should hit once the
   // map has warmed up for a team.
   if (titleId) {
@@ -276,7 +278,7 @@ async function tryGridRosterFallback(teamId, env, nameHint = null) {
     }
   }
 
-  // 2) GRID's own externalId resolution — only attempted once we've
+  // 2) GRID's own externalId resolution - only attempted once we've
   // confirmed (via dataProviders(), not a guess) that PandaScore is
   // actually registered as a linked data provider on this account, and
   // under what exact name. A null result here (provider not linked, or a
@@ -292,7 +294,7 @@ async function tryGridRosterFallback(teamId, env, nameHint = null) {
           console.log(`[GRID] Roster fallback served for team ${teamId} via externalId(${providerName})->${gridTeamId}: ${roster.players.length} players`);
           await safePut(env, `team_roster_${teamId}`, JSON.stringify(roster), { expirationTtl: GRID_ROSTER_CACHE_TTL_S });
           await safePut(env, `team_roster_stale_${teamId}`, JSON.stringify(roster));
-          // Confirmed by GRID itself — worth caching in the same map so
+          // Confirmed by GRID itself - worth caching in the same map so
           // future calls skip straight to step 1.
           const teamIdMap = await getGridTeamIdMap(env);
           if (teamIdMap[String(teamId)] !== gridTeamId) {
@@ -325,61 +327,71 @@ async function tryGridRosterFallback(teamId, env, nameHint = null) {
   return roster;
 }
 
-async function fetchTeamRoster(teamId, token, env, nameHint = null) {
+// Visitor-facing roster reads are deliberately KV-only. This function must
+// never call PandaScore or GRID: cache misses are handled by the scheduler.
+// The durable stale copy lets team pages remain usable during provider outages.
+async function fetchTeamRoster(teamId, _token, env, _nameHint = null) {
   const kvKey = `team_roster_${teamId}`;
   const staleKey = `team_roster_stale_${teamId}`;
 
   const cached = await env.MATCH_DATA.get(kvKey);
   if (cached) return JSON.parse(cached);
 
-  let res, body;
-  try {
-    // NOTE: PandaScore's generic "get a team" endpoint lives at /teams/{id},
-    // NOT /csgo/teams/{id}. The /csgo/ prefix only exists for CS2-specific
-    // endpoints (matches, players, games, stats) — plain team lookups are
-    // sport-agnostic and were 404'ing ("Route not found") on every single
-    // call because of this. See https://developers.pandascore.co/reference/get_teams_teamidorslug
-    res = await fetch(`${PANDA_BASE}/teams/${teamId}`, {
-      headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
-    });
-    body = await res.text();
-  } catch (err) {
-    console.error(`[PANDA] GET /teams/${teamId} network error: ${err.message}`);
-    const stale = await env.MATCH_DATA.get(staleKey);
-    if (stale) return JSON.parse(stale);
-    const grid = await tryGridRosterFallback(teamId, env, nameHint);
-    if (grid) return grid;
-    throw new Error(`PandaScore team ${teamId} unreachable and no stale copy exists`);
+  const stale = await env.MATCH_DATA.get(staleKey);
+  if (stale) return JSON.parse(stale);
+
+  throw new Error(`No cached roster exists for team ${teamId}; the next scheduled roster refresh will populate it`);
+}
+
+// Cron-only roster refresh. Unlike the visitor-facing function above, this
+// deliberately bypasses KV first so that the scheduler can update a roster.
+// No TTL is used for the fresh key: freshness is maintained by these scheduled
+// pulls, and an unchanged roster should not generate needless KV writes.
+async function refreshTeamRosterFromPandaScore(teamId, env) {
+  if (!env.PANDASCORE_TOKEN) {
+    console.warn(`[PANDA] Skipping scheduled roster refresh for team ${teamId}: PANDASCORE_TOKEN is not configured`);
+    return false;
   }
 
-  console.log(`[PANDA] GET /teams/${teamId} -> HTTP ${res.status}`);
+  const url = `${PANDA_BASE}/teams/${encodeURIComponent(teamId)}`;
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${env.PANDASCORE_TOKEN}`, 'Accept': 'application/json' },
+    });
+  } catch (err) {
+    console.error(`[PANDA] Scheduled GET /teams/${teamId} network error: ${err.message}`);
+    return false;
+  }
 
   if (!res.ok) {
-    console.error(`[PANDA] Response: ${body.slice(0, 500)}`);
-    const stale = await env.MATCH_DATA.get(staleKey);
-    if (stale) {
-      console.log(`[PANDA] Serving stale roster for team ${teamId} (HTTP ${res.status} from PandaScore)`);
-      return JSON.parse(stale);
-    }
-    const grid = await tryGridRosterFallback(teamId, env, nameHint);
-    if (grid) return grid;
-    throw new Error(`PandaScore team ${teamId} failed: HTTP ${res.status} ${body.slice(0, 300)}`);
+    const retryAfter = res.status === 429 ? res.headers.get('Retry-After') : null;
+    console.error(`[PANDA] Scheduled GET /teams/${teamId} failed: HTTP ${res.status}${retryAfter ? ` (Retry-After ${retryAfter}s)` : ''}; cached roster retained`);
+    return false;
   }
 
   let data;
   try {
-    data = JSON.parse(body);
-  } catch (_) {
-    const stale = await env.MATCH_DATA.get(staleKey);
-    if (stale) return JSON.parse(stale);
-    const grid = await tryGridRosterFallback(teamId, env, nameHint);
-    if (grid) return grid;
-    throw new Error(`PandaScore team ${teamId} returned invalid JSON`);
+    data = await res.json();
+  } catch (err) {
+    console.error(`[PANDA] Scheduled GET /teams/${teamId} returned invalid JSON: ${err.message}`);
+    return false;
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    console.error(`[PANDA] Scheduled GET /teams/${teamId} returned an unexpected payload; cached roster retained`);
+    return false;
   }
 
-  await safePut(env, kvKey, JSON.stringify(data), { expirationTtl: TEAM_ROSTER_CACHE_TTL_S });
-  await safePut(env, staleKey, JSON.stringify(data));
-  return data;
+  const serialized = JSON.stringify(data);
+  const freshResult = await putIfChanged(env, `team_roster_${teamId}`, serialized);
+  const staleResult = await putIfChanged(env, `team_roster_stale_${teamId}`, serialized);
+  if (freshResult === null || staleResult === null) {
+    console.error(`[PANDA] Roster data fetched for team ${teamId}, but one or more KV writes failed`);
+    return false;
+  }
+
+  console.log(`[PANDA] Scheduled roster refresh for team ${teamId}: ${freshResult || staleResult ? 'data changed/saved' : 'unchanged'}`);
+  return true;
 }
 
 // ── GRID QUERIES (from shared.js) ───────────────────────────────────────
@@ -426,20 +438,20 @@ const QUERY_SERIES_STATE = `
 `;
 
 // NOTE: `players` here resolves to the `GamePlayerState` interface, not the
-// concrete `GamePlayerStateCs2` type directly — kills/deaths/killAssistsGiven
+// concrete `GamePlayerStateCs2` type directly - kills/deaths/killAssistsGiven
 // live on the interface so they're selectable bare, but headshots and
 // damageDealt only exist on GamePlayerStateCs2 and MUST be behind an inline
 // fragment. Selecting them bare (as a prior version of this query did) is a
 // validation error ("Field 'X' in type 'GamePlayerState' is undefined"),
-// which GRID rejects for the whole query, not just those two fields —
+// which GRID rejects for the whole query, not just those two fields -
 // seriesState comes back null and every game in the batch silently produces
 // zero rows, which is exactly what "teams { score }" is also needed to
 // derive ADR from since GRID has no direct per-round-damage field.
 // Extended to also pull weaponKills/multikills/firstKill on the per-game
-// players (GamePlayerStateCs2 — zero extra GRID calls, same query, we were
+// players (GamePlayerStateCs2 - zero extra GRID calls, same query, we were
 // already paying for this request) and a top-level `teams` selection giving
 // GRID's own series-aggregated totals per player (SeriesTeamStateCs2 /
-// SeriesPlayerStateCs2) for a season-totals rollup — see updateSeasonTotals().
+// SeriesPlayerStateCs2) for a season-totals rollup - see updateSeasonTotals().
 const QUERY_SERIES_STATE_PLAYERS = `
   query SeriesStatePlayers($id: ID!) {
     seriesState(id: $id) {
@@ -487,7 +499,7 @@ const QUERY_SERIES_STATE_PLAYERS = `
 // GRID's `players` query supports filtering directly by nationality (ISO
 // 3166-1 Alpha-3 code) and by title. Unlike the series-scanning roster
 // fallback above, this doesn't need a team name or a recent series to
-// exist — it can discover "every Swedish CS2 player GRID knows about" the
+// exist - it can discover "every Swedish CS2 player GRID knows about" the
 // same way PandaScore's filter[nationality]=SE does. See
 // fetchGridSwedishPlayers() / resolveGridCs2TitleId().
 const QUERY_TITLES = `
@@ -552,7 +564,7 @@ const QUERY_PLAYERS_BY_TEAM = `
 
 // Resolves GRID's own team ID from another data provider's team ID (e.g.
 // PandaScore's numeric team ID), via GRID's externalId mapping. Requires
-// knowing the exact provider name string GRID uses internally — see
+// knowing the exact provider name string GRID uses internally - see
 // resolvePandascoreProviderName() below, which discovers this instead of
 // guessing it.
 const QUERY_TEAM_ID_BY_EXTERNAL_ID = `
@@ -583,7 +595,7 @@ async function resolveGridTeamIdFromExternalId(pandaTeamId, titleId, gridToken, 
 // dataProviders() is a documented Central Data query that lists every data
 // provider GRID actually recognizes by name. Resolving it once (cached
 // indefinitely, same TTL as the CS2 title ID) tells us definitively whether
-// PandaScore is linked at all on this account and under what exact string —
+// PandaScore is linked at all on this account and under what exact string -
 // instead of hardcoding "PANDASCORE" and silently falling through to the
 // name-based fallback on every single miss.
 const QUERY_DATA_PROVIDERS = `
@@ -614,7 +626,7 @@ async function resolvePandascoreProviderName(token, env) {
 }
 
 // A team's externalLinks field is the ground truth for "is this GRID team
-// actually linked to PandaScore, and under what ID" — more reliable than
+// actually linked to PandaScore, and under what ID" - more reliable than
 // teamIdByExternalId, which requires already knowing the provider name AND
 // depends on that specific team having been linked. Used opportunistically
 // whenever we've already found a GRID team by name match, to upgrade that
@@ -667,7 +679,7 @@ async function fetchGridTeamRosterById(gridTeamId, titleId, gridToken) {
   let after = null;
   let hasNextPage = true;
   let pages = 0;
-  const MAX_PAGES = 4; // 50/page — a roster is never more than a handful of players
+  const MAX_PAGES = 4; // 50/page - a roster is never more than a handful of players
 
   while (hasNextPage && pages < MAX_PAGES) {
     const result = await queryGridCentral(
@@ -729,7 +741,7 @@ async function queryGridCentral(variables, token, query = QUERY_CS2_SERIES) {
 }
 
 // ── GRID NATIONALITY-BASED PLAYER DISCOVERY ────────────────────────────────
-// Resolves and caches (long TTL — this practically never changes) the GRID
+// Resolves and caches (long TTL - this practically never changes) the GRID
 // title ID for CS2, so QUERY_PLAYERS_BY_NATIONALITY can filter to CS2 only
 // instead of returning a Swedish Dota/Valorant/LoL player by mistake.
 const GRID_TITLE_ID_CACHE_TTL_S = 30 * 24 * 60 * 60;
@@ -752,7 +764,7 @@ async function resolveGridCs2TitleId(token, env) {
 }
 
 // GRID's nationality codes are ISO 3166-1 Alpha-3 ("SWE"), while
-// PandaScore's is ISO 3166-1 Alpha-2 ("SE") — this is the one static
+// PandaScore's is ISO 3166-1 Alpha-2 ("SE") - this is the one static
 // mapping needed since we only ever query for Sweden here.
 const NATIONALITY_ALPHA2_TO_ALPHA3 = { SE: 'SWE' };
 
@@ -864,18 +876,13 @@ async function fetchSwedishPlayers(token) {
 }
 
 // ── PANDASCORE INCIDENTS (roster/score-correction change feed) ────────────
-// Team rosters currently only refresh when TEAM_ROSTER_CACHE_TTL_S expires
-// (24h) or when a new player list happens to surface a changed current_team
-// on a metadata tick (every ~24 min at best). A trade or roster swap in
-// between is invisible until one of those triggers fires. PandaScore's
-// Incidents API is a documented changelog of exactly this kind of change,
-// available on all plans, and at 20-60 calls/hour against a 1000/hour cap
-// there's no reason not to poll it here — it costs one extra call per
-// metadata tick and zero extra KV writes (it only ever deletes a roster
-// cache key early; it never writes new data itself).
+// Roster caches are now refreshed by cron, not by team-page visits. This
+// Incidents feed lets us invalidate the fresh cache after roster/score changes;
+// the same metadata tick can then refresh one missing roster. Polling is gated
+// to the ~24-minute metadata cadence rather than every live-data tick.
 //
 // NOTE: verify the exact filter/param names below against PandaScore's
-// current Incidents API reference for your account/plan — this is built
+// current Incidents API reference for your account/plan - this is built
 // from their documented shape (type/created_after/sort), not a response
 // confirmed against a live token.
 async function fetchRecentPandaIncidents(token, sinceIso) {
@@ -883,10 +890,9 @@ async function fetchRecentPandaIncidents(token, sinceIso) {
   return fetchPandascoreWithPagination(url, token, 1);
 }
 
-// Cloudflare KV deletes are counted against their own 1,000/day quota on
-// the free tier, separate from the 1,000 writes/day budget the rest of this
-// file is careful about — roster changes are rare enough that this is not
-// worth gating further.
+// Cloudflare KV deletes have their own 1,000/day free-tier quota. Check that
+// a fresh cache key exists before deleting it, so one incident repeated in
+// the overlap window cannot consume delete quota over and over.
 async function invalidateRostersForIncidents(incidents, env) {
   const rosterIncidents = (incidents || []).filter(i =>
     i.type === 'roster' || i.resource_type === 'team' || i.resource_type === 'roster'
@@ -896,7 +902,10 @@ async function invalidateRostersForIncidents(incidents, env) {
     const teamId = inc.team_id ?? inc.resource_id ?? inc.object_id;
     if (!teamId) continue;
     try {
-      await env.MATCH_DATA.delete(`team_roster_${teamId}`);
+      const freshKey = `team_roster_${teamId}`;
+      const freshRoster = await env.MATCH_DATA.get(freshKey);
+      if (!freshRoster) continue;
+      await env.MATCH_DATA.delete(freshKey);
       invalidated++;
     } catch (err) {
       console.warn(`[INCIDENTS] Failed to invalidate roster cache for team ${teamId}: ${err.message}`);
@@ -962,7 +971,7 @@ function gridSeriesToPandaMatch(series, state = null) {
   }));
 
   // GRID's per-game team objects (QUERY_SERIES_STATE's games[].teams) only
-  // carry `name` and `score`, never an id — so per-game team ids have to be
+  // carry `name` and `score`, never an id - so per-game team ids have to be
   // resolved back to the series-level opponent by normalized name match,
   // the same strategy findGridSeries already uses. The previous version
   // read `t.id` directly, which GRID never returns, so every game-level
@@ -980,7 +989,7 @@ function gridSeriesToPandaMatch(series, state = null) {
         score: t.score ?? 0,
       };
     });
-    // GRID has no per-game winner field, only each team's map score — so
+    // GRID has no per-game winner field, only each team's map score - so
     // the winner has to be derived by comparing the two scores directly.
     // Without this, extractMapScore()'s fallback in shared.js (which reads
     // `game.winner.id`) always failed silently and every GRID match showed
@@ -1003,7 +1012,7 @@ function gridSeriesToPandaMatch(series, state = null) {
 
   // Maps won per opponent, counted straight off each game's derived winner
   // above. This is what PandaScore's `results[].score` means (maps won,
-  // not rounds) — GRID's series-level `teams` field only carries
+  // not rounds) - GRID's series-level `teams` field only carries
   // `name`/`won`, never a score, so the old code was reading `st.score`,
   // a field that plain does not exist on GRID's response, and always got
   // `undefined ?? 0`. Every GRID-sourced match showed 0-0 as a result.
@@ -1111,7 +1120,7 @@ function isSwedishTeam(match, swedishTeamIds) {
 //
 // This is now the SECOND choice, tried only after
 // resolveGridTeamIdFromExternalId()/fetchGridTeamRosterById() (exact ID
-// match via GRID's externalId mapping) comes up empty — see
+// match via GRID's externalId mapping) comes up empty - see
 // tryGridRosterFallback(). Kept as-is for when that mapping isn't
 // available.
 //
@@ -1156,7 +1165,7 @@ async function fetchGridTeamRosterByName(teamName, gridToken, env = null, pandaT
   // already sitting in the series data we just fetched (QUERY_CS2_SERIES
   // selects teams { baseInfo { id name } }), so this costs nothing extra
   // to read. Checking its externalLinks against the PandaScore team ID
-  // costs one GRID call, but only ever runs once per team — after that,
+  // costs one GRID call, but only ever runs once per team - after that,
   // tryGridRosterFallback's step 1 (cached map) makes this whole
   // name-matching function unnecessary for this team.
   if (env && pandaTeamId) {
@@ -1190,21 +1199,27 @@ async function fetchGridTeamRosterByName(teamName, gridToken, env = null, pandaT
 }
 
 
+// Each match is enriched independently, so one failing lookup can never
+// stop the rest of the matches (or the live_data write after this).
 async function attachGridStateToRunningMatches(runningMatches, swedishTeamIds, gridToken) {
   for (const match of runningMatches) {
-    if (!isSwedishTeam(match, swedishTeamIds)) continue;
-    const team1 = match.opponents?.[0]?.opponent?.name || '';
-    const team2 = match.opponents?.[1]?.opponent?.name || '';
-    const matchTime = new Date(match.begin_at);
-    const startTime = new Date(matchTime.getTime() - 5 * 60 * 1000).toISOString();
-    const endTime = new Date(matchTime.getTime() + 5 * 60 * 1000).toISOString();
-    const centralResult = await queryGridCentral({ gte: startTime, lte: endTime }, gridToken);
-    if (!centralResult?.data?.allSeries?.edges) continue;
-    const gridSeriesList = centralResult.data.allSeries.edges.map(e => e.node);
-    const matchedSeries = findGridSeries(team1, team2, gridSeriesList);
-    if (matchedSeries) {
-      const liveResult = await queryGridLive(matchedSeries.id, gridToken);
-      match.grid_state = liveResult?.data?.seriesState || null;
+    try {
+      if (!isSwedishTeam(match, swedishTeamIds)) continue;
+      const team1 = match.opponents?.[0]?.opponent?.name || '';
+      const team2 = match.opponents?.[1]?.opponent?.name || '';
+      const matchTime = new Date(match.begin_at);
+      const startTime = new Date(matchTime.getTime() - 5 * 60 * 1000).toISOString();
+      const endTime = new Date(matchTime.getTime() + 5 * 60 * 1000).toISOString();
+      const centralResult = await queryGridCentral({ gte: startTime, lte: endTime }, gridToken);
+      if (!centralResult?.data?.allSeries?.edges) continue;
+      const gridSeriesList = centralResult.data.allSeries.edges.map(e => e.node);
+      const matchedSeries = findGridSeries(team1, team2, gridSeriesList);
+      if (matchedSeries) {
+        const liveResult = await queryGridLive(matchedSeries.id, gridToken);
+        match.grid_state = liveResult?.data?.seriesState || null;
+      }
+    } catch (err) {
+      console.warn(`[GRID] State enrichment failed for match ${match?.id}: ${err.message}`);
     }
   }
   return runningMatches;
@@ -1259,9 +1274,19 @@ async function mergeHistoryData(existing, newMatches) {
     .sort((a, b) => new Date(b.begin_at) - new Date(a.begin_at));
 }
 
+// Loads the stored history, merges the new matches in, and writes it back
+// (only if it changed). This replaces the same three-line block that used
+// to be copied into three places in handleScheduled.
+async function storeMergedHistory(env, newMatches) {
+  const existingHistoryJson = await env.MATCH_DATA.get(KV_HISTORY_DATA);
+  const existingHistory = existingHistoryJson ? JSON.parse(existingHistoryJson) : [];
+  const mergedHistory = await mergeHistoryData(existingHistory, newMatches);
+  await putIfChanged(env, KV_HISTORY_DATA, JSON.stringify(mergedHistory));
+}
+
 // ── FRAGBITE NEWS ─────────────────────────────────────────────────────────
 // rss.fragbite.se has no CORS headers, so the browser can never fetch it
-// directly — this is a plain server-side pull with a small regex parser
+// directly - this is a plain server-side pull with a small regex parser
 // (Workers have no DOMParser/XML library available, and the feed's shape
 // is fixed and simple enough that a full XML parser would be overkill).
 const FRAGBITE_RSS_URL = 'https://rss.fragbite.se/';
@@ -1295,6 +1320,26 @@ async function fetchFragbiteNews() {
   // news filed under /all/news/) alongside /cs/news/ items. This tracker
   // is CS2-only, so keep just the CS items.
   return items.filter(i => i.link.includes('/cs/news/')).slice(0, 12);
+}
+
+// Fragbite is not a live scoreboard. Fetch it from cron only, every four hours
+// (or once on the first scheduled run if no cached feed exists). A site visit
+// never refreshes this feed, and a failed pull leaves the previous copy intact.
+async function refreshFragbiteNews(env) {
+  try {
+    const items = await fetchFragbiteNews();
+    const record = { fetchedAt: Date.now(), items };
+    const result = await putIfChanged(env, KV_NEWS_DATA, record);
+    if (result === null) throw new Error('Fragbite data was fetched but the KV write failed');
+    console.log(`[NEWS] Scheduled Fragbite refresh completed: ${items.length} CS news items (${result ? 'saved' : 'unchanged'})`);
+    return items.length;
+  } catch (err) {
+    // If the initial fetch OR its KV write fails before a cache exists, don't
+    // retry every three minutes. A four-hour TTL throttles attempts without a
+    // persistent counter or repeated successful-path KV writes.
+    await safePut(env, KV_NEWS_RETRY_AFTER, String(Date.now()), { expirationTtl: 4 * 60 * 60 });
+    throw err;
+  }
 }
 
 
@@ -1349,7 +1394,7 @@ async function enqueueFinishedGames(matches, env) {
   });
   // Process newest games first. With PandaScore currently unavailable and
   // GRID's live-feed only retaining recent series state, the games actually
-  // worth spending a fetch on are the recent ones — a straight FIFO queue
+  // worth spending a fetch on are the recent ones - a straight FIFO queue
   // buries this week's matches behind a 14k-deep backlog of old games that
   // neither provider can serve data for anymore anyway. Sorting by date
   // descending means whatever data GRID/Panda *can* still provide surfaces
@@ -1417,7 +1462,7 @@ async function resolveGridPlayerId(name, teamId, env) {
 // non-GRID-native game in a batch, each with its own +/-24h window. Games
 // from the same match (multiple maps) share an identical meta.date, and
 // even games from different matches on the same day mostly overlap in
-// window — so that was up to STATS_BATCH_SIZE redundant central queries
+// window - so that was up to STATS_BATCH_SIZE redundant central queries
 // per tick, which is what was tipping some batches over Cloudflare's
 // 50-subrequest cap ("Too many subrequests by single Worker invocation").
 // This cache fetches the series list once per distinct day and reuses it
@@ -1440,7 +1485,7 @@ function makeGridSeriesCache(token) {
       const centralResult = await queryGridCentral({ gte, lte }, token);
       let list = centralResult?.data?.allSeries?.edges?.map(e => e.node) || [];
       // Only when the tight window comes back completely empty (not just
-      // "no name match" — see findGridSeries call site), retry once with a
+      // "no name match" - see findGridSeries call site), retry once with a
       // much wider window. This is what a rescheduled/delayed series needs
       // to still be found, without paying that wider cost for every game.
       if (!list.length) {
@@ -1462,7 +1507,7 @@ async function fetchGridPlayerRows(meta, token, env, getSeriesListForDate) {
     // gridSeriesToPandaMatch() as `grid-<seriesId>` (matchId) /
     // `grid-<seriesId>-g<sequenceNumber>` (gameId). For those, query
     // seriesState directly instead of re-deriving the series by searching
-    // a +/-24h date window and fuzzy-matching team names — that search was
+    // a +/-24h date window and fuzzy-matching team names - that search was
     // only ever needed for PandaScore-origin games, where GRID's own
     // series ID isn't known yet.
     let seriesId = null;
@@ -1478,7 +1523,7 @@ async function fetchGridPlayerRows(meta, token, env, getSeriesListForDate) {
         const sample = gridSeriesList.slice(0, 8)
           .map(s => (s.teams || []).map(t => t.baseInfo?.name || '?').join(' vs '))
           .join(' | ');
-        console.warn(`[GRID] No series found for "${meta.t1?.name}" vs "${meta.t2?.name}" near ${meta.date} (game ${meta.gameId}) — ${gridSeriesList.length} candidates in window${sample ? `: ${sample}` : ''}`);
+        console.warn(`[GRID] No series found for "${meta.t1?.name}" vs "${meta.t2?.name}" near ${meta.date} (game ${meta.gameId}) - ${gridSeriesList.length} candidates in window${sample ? `: ${sample}` : ''}`);
         return [];
       }
       seriesId = series.id;
@@ -1496,7 +1541,7 @@ async function fetchGridPlayerRows(meta, token, env, getSeriesListForDate) {
     }
     const seriesGames = json?.data?.seriesState?.games || [];
     // Match by map name when we have one; otherwise (or if that fails to
-    // find anything — e.g. the PandaScore side never populated `games.map`
+    // find anything - e.g. the PandaScore side never populated `games.map`
     // for this match) fall back to matching by position within the series.
     // Matching purely on `g.map?.name === meta.mapName` used to be the only
     // strategy, which meant a null/missing mapName could NEVER match a real
@@ -1504,10 +1549,10 @@ async function fetchGridPlayerRows(meta, token, env, getSeriesListForDate) {
     let game = meta.mapName ? seriesGames.find(g => g.map?.name === meta.mapName) : null;
     if (!game) game = seriesGames.find(g => g.sequenceNumber === meta.sequenceNumber);
     if (!game) {
-      console.warn(`[GRID] Series ${seriesId} found for game ${meta.gameId}, but no series-state data for map "${meta.mapName}" / sequence ${meta.sequenceNumber} — likely expired from GRID's live-feed retention window`);
+      console.warn(`[GRID] Series ${seriesId} found for game ${meta.gameId}, but no series-state data for map "${meta.mapName}" / sequence ${meta.sequenceNumber} - likely expired from GRID's live-feed retention window`);
       return [];
     }
-    // GRID has no single ADR field — PandaScore's is damage dealt divided
+    // GRID has no single ADR field - PandaScore's is damage dealt divided
     // by rounds played. Rounds played for a finished CS2 map is just the
     // sum of both teams' final round scores (score is "rounds won", so the
     // total is rounds played, overtime included).
@@ -1528,7 +1573,7 @@ async function fetchGridPlayerRows(meta, token, env, getSeriesListForDate) {
           assists:      p.killAssistsGiven ?? 0,
           headshots:    p.headshots ?? null,
           adr:          roundsPlayed > 0 && p.damageDealt != null ? +(p.damageDealt / roundsPlayed).toFixed(1) : null,
-          // These three are only ever populated on GRID-sourced rows — the
+          // These three are only ever populated on GRID-sourced rows - the
           // same seriesState request already made above, no extra GRID
           // call. PandaScore rows (extractPandaPlayerRows) leave them
           // undefined/null, which the frontend already treats as "no data".
@@ -1546,10 +1591,10 @@ async function fetchGridPlayerRows(meta, token, env, getSeriesListForDate) {
       }
     }
 
-    // Series-aggregated totals (GRID computes these itself — no per-map
+    // Series-aggregated totals (GRID computes these itself - no per-map
     // summing needed) came back on the very same response. Folding this in
     // here means it happens "for free" on the stats tick's existing GRID
-    // calls, once per game processed in a series — redundant across a
+    // calls, once per game processed in a series - redundant across a
     // series' maps, but putIfChanged() means only the first one per series
     // actually costs a KV write.
     if (json?.data?.seriesState?.teams) {
@@ -1565,7 +1610,7 @@ async function fetchGridPlayerRows(meta, token, env, getSeriesListForDate) {
 
 // ── SEASON TOTALS (GRID series-aggregated stats) ───────────────────────────
 // SeriesTeamStateCs2/SeriesPlayerStateCs2 give GRID's own running totals for
-// an entire series in one field selection — already included in the
+// an entire series in one field selection - already included in the
 // QUERY_SERIES_STATE_PLAYERS response fetchGridPlayerRows makes anyway, so
 // this adds no new GRID calls. Kept as a single merged KV blob (one key for
 // every player) rather than one key per player, written via putIfChanged so
@@ -1607,7 +1652,7 @@ async function updateSeasonTotals(seriesState, meta, env) {
 // Every game currently sitting in KV_STATS_DONE with no matching rows in
 // KV_PLAYER_STATS got marked done because of the GamePlayerState interface
 // bug (headshots/damageDealt selected without the GamePlayerStateCs2
-// fragment — see QUERY_SERIES_STATE_PLAYERS), which made every GRID stats
+// fragment - see QUERY_SERIES_STATE_PLAYERS), which made every GRID stats
 // query fail validation and PandaScore was returning 403s at the same time.
 // Those games exhausted STATS_MAX_ATTEMPTS and got permanently parked in
 // "done" despite never having a real chance under a working query. This
@@ -1640,7 +1685,7 @@ async function maybeRequeueStatsAfterFix(env) {
     // untouched ("leave its attempts count alone"), which sounded safe but
     // meant every game queued before the sequenceNumber idx+1 fallback
     // existed kept its stale mapName: null / sequenceNumber: undefined
-    // forever — exactly what's been making fetchGridPlayerRows's map
+    // forever - exactly what's been making fetchGridPlayerRows's map
     // lookup fail for nearly the entire queue even after the GRID query
     // fragment fix went live. A fresh re-extraction of the same gameId
     // always produces a defined sequenceNumber, so swap it in wherever the
@@ -1648,7 +1693,7 @@ async function maybeRequeueStatsAfterFix(env) {
     let rebuilt = 0;
     const rebuiltQueue = queue.map(q => {
       const fresh = freshByGameId.get(q.gameId);
-      if (!fresh) return q; // no longer in cached history — leave as-is
+      if (!fresh) return q; // no longer in cached history - leave as-is
       if (fresh.mapName === q.mapName && fresh.sequenceNumber === q.sequenceNumber) return q;
       rebuilt++;
       return { ...fresh, attempts: q.attempts || 0 };
@@ -1680,7 +1725,7 @@ const STATS_MAX_ATTEMPTS = 5; // after this many failed cron ticks, stop retryin
 async function processStatsQueue(env) {
   const queue = await getStatsQueue(env);
   if (!queue.length) return { processed: 0, newRows: 0, remaining: 0, gaveUp: 0 };
-  // Newest games first — see the comment in enqueueFinishedGames. This also
+  // Newest games first - see the comment in enqueueFinishedGames. This also
   // reorders whatever backlog is already sitting in KV, not just newly
   // added games, so it takes effect on the very next run.
   queue.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
@@ -1690,7 +1735,7 @@ async function processStatsQueue(env) {
   const existingJson = await env.MATCH_DATA.get(KV_PLAYER_STATS);
   const existingStats = existingJson ? JSON.parse(existingJson) : [];
   const existingKeys = new Set(existingStats.map(r => `${r.game_id}_${r.player_id ?? r.player_name}`));
-  // One shared series-discovery cache for the whole batch — see
+  // One shared series-discovery cache for the whole batch - see
   // makeGridSeriesCache's comment for why this matters for the
   // subrequest budget.
   const getSeriesListForDate = env.GRID_TOKEN ? makeGridSeriesCache(env.GRID_TOKEN) : null;
@@ -1698,7 +1743,7 @@ async function processStatsQueue(env) {
   let gaveUpCount = 0;
   for (const meta of batch) {
     let rows = [];
-    // Skip PandaScore entirely for GRID-native game IDs — matchId is a
+    // Skip PandaScore entirely for GRID-native game IDs - matchId is a
     // string like "grid-<seriesId>", never a PandaScore-valid numeric ID,
     // so this call would only ever waste a rate-limited request and log
     // a confusing 404/400. Go straight to the GRID fallback for these.
@@ -1712,7 +1757,7 @@ async function processStatsQueue(env) {
     if (!rows.length && env.GRID_TOKEN) {
       rows = await fetchGridPlayerRows(meta, env.GRID_TOKEN, env, getSeriesListForDate);
     } else if (!rows.length) {
-      console.warn(`[STATS] No PandaScore data for game ${meta.gameId} and GRID_TOKEN is not set — skipping GRID fallback entirely`);
+      console.warn(`[STATS] No PandaScore data for game ${meta.gameId} and GRID_TOKEN is not set - skipping GRID fallback entirely`);
     }
     rows.forEach(r => {
       const key = `${r.game_id}_${r.player_id ?? r.player_name}`;
@@ -1741,9 +1786,10 @@ async function processStatsQueue(env) {
       remaining.push({ ...meta, attempts });
     }
   }
-  await safePut(env, KV_PLAYER_STATS, JSON.stringify(existingStats));
-  await safePut(env, KV_STATS_DONE, JSON.stringify([...done]));
-  await safePut(env, KV_STATS_QUEUE, JSON.stringify(remaining));
+  // Only write what actually changed, to protect the 1,000 writes/day KV budget.
+  if (newRowCount > 0) await safePut(env, KV_PLAYER_STATS, JSON.stringify(existingStats));
+  await putIfChanged(env, KV_STATS_DONE, JSON.stringify([...done]));
+  await putIfChanged(env, KV_STATS_QUEUE, JSON.stringify(remaining));
   return { processed: batch.length, newRows: newRowCount, remaining: remaining.length, gaveUp: gaveUpCount };
 }
 
@@ -1779,213 +1825,355 @@ function isStatsTick(scheduledTime) {
   return idx % HEAVY_TASK_EVERY_N_TICKS === STATS_TICK_OFFSET;
 }
 
-async function handleScheduled(env, scheduledTime) {
-  try {
-    const metadataTick = isMetadataTick(scheduledTime);
-    const statsTick     = isStatsTick(scheduledTime);
-    console.log(`Scheduled handler triggered${metadataTick ? ' (metadata tick)' : ''}${statsTick ? ' (stats tick)' : ''}`);
+// Less time-sensitive data gets its own offsets so it doesn't collide with
+// history/stats work or spam providers. Cron cadence is three minutes:
+//  - missing/invalidated rosters: at most one team on each metadata tick
+//    (~24 min), only when the fresh key is missing;
+//  - regular roster rotation: at most five teams every 12 hours;
+//  - Fragbite news: every four hours, plus one initial fill if the key is absent.
+const ROSTER_REFRESH_EVERY_N_TICKS = 240; // 12 hours
+const ROSTER_REFRESH_TICK_OFFSET = 2;      // separate from metadata/stats ticks
+const ROSTER_REFRESH_BATCH_SIZE = 5;       // caps API calls per roster batch
+const NEWS_REFRESH_EVERY_N_TICKS = 80;     // 4 hours
+const NEWS_REFRESH_TICK_OFFSET = 1;        // separate from metadata/stats/roster ticks
 
+function isRosterRefreshTick(scheduledTime) {
+  const idx = tickIndexFor(scheduledTime);
+  return idx !== null && idx % ROSTER_REFRESH_EVERY_N_TICKS === ROSTER_REFRESH_TICK_OFFSET;
+}
+
+function isNewsRefreshTick(scheduledTime) {
+  const idx = tickIndexFor(scheduledTime);
+  return idx !== null && idx % NEWS_REFRESH_EVERY_N_TICKS === NEWS_REFRESH_TICK_OFFSET;
+}
+
+// On metadata ticks, fill at most one missing/invalidated roster. Rotating the
+// starting index using the tick index avoids storing a cursor on every tick,
+// and therefore avoids adding 60 KV writes/day just for the cursor.
+async function refreshOneMissingTeamRoster(env, scheduledTime) {
+  let teams = [];
+  try {
+    teams = JSON.parse(await env.MATCH_DATA.get(KV_SWEDISH_TEAMS) || '[]').map(String);
+  } catch (err) {
+    console.warn(`[ROSTER] Could not read the Swedish team list: ${err.message}`);
+    return false;
+  }
+  // These IDs feed PandaScore's /teams/{id} endpoint, so ignore GRID-only
+  // synthetic IDs rather than spending requests on IDs PandaScore cannot know.
+  teams = [...new Set(teams.map(String).filter(id => /^\d+$/.test(id)))];
+  if (!teams.length) return false;
+
+  const idx = tickIndexFor(scheduledTime) ?? 0;
+  const start = Math.floor(idx / HEAVY_TASK_EVERY_N_TICKS) % teams.length;
+  for (let offset = 0; offset < teams.length; offset++) {
+    const teamId = teams[(start + offset) % teams.length];
+    const cached = await env.MATCH_DATA.get(`team_roster_${teamId}`);
+    if (cached) continue;
+    console.log(`[ROSTER] Found missing/invalidated roster cache for team ${teamId}; refreshing one roster on this metadata tick`);
+    return refreshTeamRosterFromPandaScore(teamId, env);
+  }
+  return false;
+}
+
+// A small round-robin refresh catches changes even if the incidents endpoint
+// is unavailable. Each run spends no more than five PandaScore requests; the
+// cursor is updated once per batch, not once per team or on visitor requests.
+async function refreshTeamRosterBatch(env) {
+  let teams = [];
+  try {
+    teams = JSON.parse(await env.MATCH_DATA.get(KV_SWEDISH_TEAMS) || '[]').map(String);
+  } catch (err) {
+    console.warn(`[ROSTER] Could not read the Swedish team list: ${err.message}`);
+    return { attempted: 0, succeeded: 0 };
+  }
+  // Skip synthetic GRID IDs; this batch intentionally makes only valid
+  // PandaScore /teams/{id} requests.
+  teams = [...new Set(teams.map(String).filter(id => /^\d+$/.test(id)))];
+  if (!teams.length) return { attempted: 0, succeeded: 0 };
+
+  let cursor = 0;
+  try { cursor = parseInt(await env.MATCH_DATA.get(KV_ROSTER_REFRESH_CURSOR) || '0', 10) || 0; } catch (_) {}
+  cursor = ((cursor % teams.length) + teams.length) % teams.length;
+  const batchSize = Math.min(ROSTER_REFRESH_BATCH_SIZE, teams.length);
+  let succeeded = 0;
+  for (let i = 0; i < batchSize; i++) {
+    const teamId = teams[(cursor + i) % teams.length];
+    if (await refreshTeamRosterFromPandaScore(teamId, env)) succeeded++;
+  }
+
+  const nextCursor = (cursor + batchSize) % teams.length;
+  if (nextCursor !== cursor) {
+    const cursorWrite = await putIfChanged(env, KV_ROSTER_REFRESH_CURSOR, String(nextCursor));
+    if (cursorWrite === null) console.error('[ROSTER] Failed to save roster refresh cursor; the next batch may repeat teams');
+  }
+  console.log(`[ROSTER] Scheduled batch completed: ${succeeded}/${batchSize} roster refreshes succeeded`);
+  return { attempted: batchSize, succeeded };
+}
+
+// Step 1 of every tick: build and store live_data. This runs FIRST and has
+// its own error isolation, so nothing that happens later can block it.
+// Returns swedishTeamNames for the history step.
+async function refreshLiveData(env, metadataTick) {
+  const oldLiveJson = await env.MATCH_DATA.get(KV_LIVE_DATA);
+  const oldLive = oldLiveJson ? JSON.parse(oldLiveJson) : null;
+
+  // 1) Swedish player/team discovery. Order of preference:
+  //    a) PandaScore (source of truth - has real nationality data)
+  //    b) GRID, queried directly by nationality (fetchGridSwedishPlayers) -
+  //       a real fallback, not just a name-matching workaround, since
+  //       GRID's `players` query supports a nationality filter.
+  //    c) Last-known player list already in KV_LIVE_DATA ("freeze the
+  //       roster" - rosters don't change fast enough for this to be
+  //       stale in any way that matters over a PandaScore outage).
+  let players = await tryPanda(
+    () => fetchSwedishPlayers(env.PANDASCORE_TOKEN),
+    null
+  );
+  let playersSource = players !== null ? 'pandascore' : 'unavailable';
+
+  let swedishTeamNames = [];
+  if (players && players.length) {
+    swedishTeamNames = [...new Set(
+      players.map(p => p.current_team?.name).filter(Boolean)
+    )];
+    // Team metadata (KV_SWEDISH_TEAMS/NAMES) only feeds the history-rotation
+    // cursor and the Panda-outage fallback below - rosters barely change,
+    // so this write doesn't need to happen every tick. swedishTeamNames
+    // itself is still recomputed fresh every tick for match filtering.
+    if (metadataTick) await step('save team metadata', () => saveSwedishTeamMetadata(players, env));
+  } else {
+    // PandaScore returned nothing usable (null = failed, or a genuinely
+    // empty list). Try GRID's own nationality filter before giving up.
+    if (env.GRID_TOKEN) {
+      const gridPlayers = await step('grid swedish players', () => fetchGridSwedishPlayers('SE', env.GRID_TOKEN, env));
+      if (gridPlayers && gridPlayers.length) {
+        players = gridPlayers;
+        playersSource = 'grid';
+        swedishTeamNames = [...new Set(
+          players.map(p => p.current_team?.name).filter(Boolean)
+        )];
+        if (metadataTick) await step('save team metadata', () => saveSwedishTeamMetadata(players, env));
+      }
+    }
+    if (!players || !players.length) {
+      // GRID fallback unavailable or also came back empty - freeze the
+      // roster at its last known-good state rather than showing nothing.
+      swedishTeamNames = await getCachedSwedishTeamNames(env);
+      players = (oldLive?.players?.length ? oldLive.players : []);
+      playersSource = oldLive?.players?.length ? 'stale-cache' : 'unavailable';
+    }
+  }
+
+  // 2) Running/upcoming matches:
+  // PandaScore first; GRID becomes the fallback for the same time windows.
+  let runningMatches = await tryPanda(
+    () => fetchRunningMatches(env.PANDASCORE_TOKEN),
+    null
+  );
+  let runningSource = runningMatches !== null ? 'pandascore' : 'unavailable';
+
+  let upcomingMatches = await tryPanda(
+    () => fetchUpcomingMatches(env.PANDASCORE_TOKEN),
+    null
+  );
+  let upcomingSource = upcomingMatches !== null ? 'pandascore' : 'unavailable';
+
+  const now = new Date();
+  const runningGte = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString();
+  const runningLte = new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString();
+  const upcomingGte = now.toISOString();
+  const upcomingLte = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  if (runningMatches === null && env.GRID_TOKEN && swedishTeamNames.length) {
+    const gridRunning = await step('grid running matches', () => fetchGridMatches(
+      env.GRID_TOKEN, swedishTeamNames, runningGte, runningLte, true
+    ));
+    if (gridRunning !== null) {
+      runningMatches = gridRunning;
+      runningSource = 'grid';
+    }
+  }
+
+  if (upcomingMatches === null && env.GRID_TOKEN && swedishTeamNames.length) {
+    const gridUpcoming = await step('grid upcoming matches', () => fetchGridMatches(
+      env.GRID_TOKEN, swedishTeamNames, upcomingGte, upcomingLte, false
+    ));
+    if (gridUpcoming !== null) {
+      upcomingMatches = gridUpcoming;
+      upcomingSource = 'grid';
+    }
+  }
+
+  // If both providers failed completely, keep the previous matches instead of
+  // overwriting live_data with empty lists.
+  if (runningMatches === null && oldLive?.running_matches) {
+    runningMatches = oldLive.running_matches;
+    runningSource = 'stale-cache';
+  }
+  if (upcomingMatches === null && oldLive?.upcoming_matches) {
+    upcomingMatches = oldLive.upcoming_matches;
+    upcomingSource = 'stale-cache';
+  }
+
+  const isSwedishMatch = m =>
+    m.opponents?.length === 2 &&
+    (swedishTeamNames.length
+      ? m.opponents.some(o => swedishTeamNames.some(n => normName(n) === normName(o.opponent?.name)))
+      : true);
+
+  runningMatches = (runningMatches || []).filter(isSwedishMatch);
+  upcomingMatches = (upcomingMatches || []).filter(isSwedishMatch);
+
+  // Enrich Panda-sourced running matches with GRID live state when possible.
+  if (env.GRID_TOKEN && runningMatches.length) {
+    runningMatches = await step('grid state enrichment', () => attachGridStateToRunningMatches(
+      runningMatches,
+      [...new Set(
+        players.map(p => p.current_team?.id).filter(Boolean)
+      )],
+      env.GRID_TOKEN
+    ), runningMatches);
+  }
+
+  const liveData = {
+    // This timestamp is the last cron-produced snapshot write, not the time a
+    // visitor requested it. refresh_status distinguishes fresh provider data
+    // from stale-cache fallbacks if an upstream API has a temporary outage.
+    timestamp: new Date().toISOString(),
+    refresh_status: {
+      players: playersSource,
+      running_matches: runningSource,
+      upcoming_matches: upcomingSource,
+    },
+    players,
+    running_matches: runningMatches,
+    upcoming_matches: upcomingMatches,
+  };
+
+  const liveWritten = await putIfChanged(env, KV_LIVE_DATA, liveData);
+  if (liveWritten === true) {
+    console.log(`Live data saved - ${runningMatches.length || 0} running + ${upcomingMatches.length || 0} upcoming matches (players=${playersSource}, running=${runningSource}, upcoming=${upcomingSource})`);
+  } else if (liveWritten === false) {
+    console.log('Live data unchanged; KV write skipped');
+  } else {
+    console.error('[CRON] LIVE DATA KV WRITE FAILED. The site will keep serving the last successfully saved snapshot.');
+  }
+
+  return swedishTeamNames;
+}
+
+// 3) History rotation. Prefer PandaScore one-team rotation. If unavailable,
+// use GRID series state over a recent window and merge the converted matches.
+async function refreshHistory(env, swedishTeamNames) {
+  const gridHistoryFallback = async () => {
+    if (!env.GRID_TOKEN || !swedishTeamNames.length) return;
+    const historyGte = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    const historyLte = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const gridHistory = await fetchGridMatches(
+      env.GRID_TOKEN, swedishTeamNames, historyGte, historyLte, true
+    );
+    await storeMergedHistory(env, gridHistory);
+  };
+
+  const rotation = await rotateHistoryTeam(env);
+  if (!rotation) return gridHistoryFallback();
+
+  const newMatches = await tryPanda(
+    () => fetchSwedishTeamMatches(rotation.teamId, env.PANDASCORE_TOKEN),
+    null
+  );
+  if (newMatches) return storeMergedHistory(env, newMatches);
+  return gridHistoryFallback();
+}
+
+async function handleScheduled(env, scheduledTime) {
+  const metadataTick = isMetadataTick(scheduledTime);
+  const statsTick     = isStatsTick(scheduledTime);
+  console.log(`Scheduled handler triggered${metadataTick ? ' (metadata tick)' : ''}${statsTick ? ' (stats tick)' : ''}`);
+
+  // Live data FIRST, in its own try/catch. Everything below is optional
+  // background work and can fail without ever blocking this write.
+  let swedishTeamNames = null;
+  try {
+    swedishTeamNames = await refreshLiveData(env, metadataTick);
+  } catch (err) {
+    console.error(`[CRON] Live data refresh failed: ${err.message}`);
+  }
+
+  // Incidents feed: catches roster/score-correction changes on the ~24-minute
+  // metadata cadence. A confirmed roster incident invalidates an existing
+  // fresh roster key; the missing-roster cron step below can refill one team
+  // in this same invocation. Visitor requests never perform that refresh.
+  if (metadataTick && env.PANDASCORE_TOKEN) {
+    await step('incidents', async () => {
+      const sinceIso = new Date(Date.now() - (HEAVY_TASK_EVERY_N_TICKS * CRON_INTERVAL_MINUTES + 5) * 60 * 1000).toISOString();
+      const incidents = await fetchRecentPandaIncidents(env.PANDASCORE_TOKEN, sinceIso);
+      if (incidents) await invalidateRostersForIncidents(incidents, env);
+    });
+  }
+
+  // Missing or incident-invalidated rosters are refreshed in cron only. One
+  // team maximum is attempted per metadata tick, so a new roster cannot fan
+  // out into a large burst of PandaScore requests.
+  if (metadataTick) {
+    await step('missing team roster refresh', () => refreshOneMissingTeamRoster(env, scheduledTime));
+  }
+
+  // Regular roster refresh rotates through up to five teams every 12 hours.
+  // Its tick offset is separate from metadata/history and player stats.
+  if (isRosterRefreshTick(scheduledTime)) {
+    await step('scheduled roster batch', () => refreshTeamRosterBatch(env));
+  }
+
+  // Fragbite's feed is not live data, so refresh it at most every four hours.
+  // First scheduled tick also fills the cache if it has never been populated.
+  if (isNewsRefreshTick(scheduledTime)) {
+    await step('scheduled Fragbite news refresh', () => refreshFragbiteNews(env));
+  } else {
+    const cachedNews = await step('check Fragbite cache', () => env.MATCH_DATA.get(KV_NEWS_DATA), null);
+    if (!cachedNews) {
+      const retryAfter = await step('check Fragbite retry throttle', () => env.MATCH_DATA.get(KV_NEWS_RETRY_AFTER), null);
+      if (!retryAfter) {
+        await step('initial Fragbite news refresh', () => refreshFragbiteNews(env));
+      } else {
+        console.log('[NEWS] Initial fetch is temporarily throttled after a previous failure; will retry after the four-hour backoff');
+      }
+    }
+  }
+
+  // History rotation - only on the metadata tick (see the subrequest
+  // budget note above).
+  if (metadataTick) {
+    await step('history rotation', async () => {
+      const names = swedishTeamNames ?? await getCachedSwedishTeamNames(env);
+      await refreshHistory(env, names);
+    });
+  }
+
+  // Player stats queue - on its own tick, offset from the metadata
+  // tick, so it gets its own ~50-subrequest budget instead of splitting
+  // it with team-metadata/history-rotation work above.
+  if (statsTick) {
     // One-time requeue after the GRID GamePlayerState interface fragment fix
     // (see maybeRequeueStatsAfterFix's own comment). Guarded internally by
-    // KV_STATS_MIGRATION so this is a single cheap KV read on every tick
-    // after the one time it actually runs. Must happen before the stats
-    // tick below, or the fix has nothing to retry — every affected game is
+    // KV_STATS_MIGRATION so this is a single cheap KV read on every stats
+    // tick after the one time it actually runs. Must happen before the stats
+    // queue below, or the fix has nothing to retry - every affected game is
     // still sitting in KV_STATS_DONE from the broken query.
-    await maybeRequeueStatsAfterFix(env);
-
-    // Incidents feed: catches roster/score-correction changes between
-    // metadata ticks instead of waiting up to ~24 min for the next full
-    // players pull to notice a swap. One extra PandaScore call, gated to
-    // the metadata tick so it runs on the same ~24-min cadence as the rest
-    // of the "not every tick needs this" work; zero extra KV writes on the
-    // happy path (it only deletes a stale roster cache key, which forces a
-    // fresh pull the next time that team's roster is requested).
-    if (metadataTick && env.PANDASCORE_TOKEN) {
-      try {
-        const sinceIso = new Date(Date.now() - (HEAVY_TASK_EVERY_N_TICKS * CRON_INTERVAL_MINUTES + 5) * 60 * 1000).toISOString();
-        const incidents = await fetchRecentPandaIncidents(env.PANDASCORE_TOKEN, sinceIso);
-        if (incidents) await invalidateRostersForIncidents(incidents, env);
-      } catch (e) {
-        console.warn(`[INCIDENTS] Fetch/invalidate failed: ${e.message}`);
+    await step('stats requeue migration', () => maybeRequeueStatsAfterFix(env));
+    await step('player stats pipeline', async () => {
+      const historyJson = await env.MATCH_DATA.get(KV_HISTORY_DATA);
+      const historyForQueue = historyJson ? JSON.parse(historyJson) : [];
+      const added = await enqueueFinishedGames(historyForQueue, env);
+      if (added) console.log(`Queued ${added} newly finished games for stats`);
+      const { processed, newRows, remaining, gaveUp } = await processStatsQueue(env);
+      if (processed) {
+        console.log(`Player stats: processed ${processed} games, ${newRows} new rows, ${gaveUp} gave up, ${remaining} left in queue`);
       }
-    }
-
-    const oldLiveJson = await env.MATCH_DATA.get(KV_LIVE_DATA);
-    const oldLive = oldLiveJson ? JSON.parse(oldLiveJson) : null;
-
-    // 1) Swedish player/team discovery. Order of preference:
-    //    a) PandaScore (source of truth — has real nationality data)
-    //    b) GRID, queried directly by nationality (fetchGridSwedishPlayers) —
-    //       a real fallback, not just a name-matching workaround, since
-    //       GRID's `players` query supports a nationality filter.
-    //    c) Last-known player list already in KV_LIVE_DATA ("freeze the
-    //       roster" — rosters don't change fast enough for this to be
-    //       stale in any way that matters over a PandaScore outage).
-    let players = await tryPanda(
-      () => fetchSwedishPlayers(env.PANDASCORE_TOKEN),
-      null
-    );
-
-    let swedishTeamNames = [];
-    if (players && players.length) {
-      swedishTeamNames = [...new Set(
-        players.map(p => p.current_team?.name).filter(Boolean)
-      )];
-      // Team metadata (KV_SWEDISH_TEAMS/NAMES) only feeds the history-rotation
-      // cursor and the Panda-outage fallback below — rosters barely change,
-      // so this write doesn't need to happen every tick. swedishTeamNames
-      // itself is still recomputed fresh every tick for match filtering.
-      if (metadataTick) await saveSwedishTeamMetadata(players, env);
-    } else {
-      // PandaScore returned nothing usable (null = failed, or a genuinely
-      // empty list). Try GRID's own nationality filter before giving up.
-      if (env.GRID_TOKEN) {
-        const gridPlayers = await fetchGridSwedishPlayers('SE', env.GRID_TOKEN, env);
-        if (gridPlayers && gridPlayers.length) {
-          players = gridPlayers;
-          swedishTeamNames = [...new Set(
-            players.map(p => p.current_team?.name).filter(Boolean)
-          )];
-          if (metadataTick) await saveSwedishTeamMetadata(players, env);
-        }
-      }
-      if (!players || !players.length) {
-        // GRID fallback unavailable or also came back empty — freeze the
-        // roster at its last known-good state rather than showing nothing.
-        swedishTeamNames = await getCachedSwedishTeamNames(env);
-        players = (oldLive?.players?.length ? oldLive.players : []);
-      }
-    }
-
-    // 2) Running/upcoming matches:
-    // PandaScore first; GRID becomes the fallback for the same time windows.
-    let runningMatches = await tryPanda(
-      () => fetchRunningMatches(env.PANDASCORE_TOKEN),
-      null
-    );
-
-    let upcomingMatches = await tryPanda(
-      () => fetchUpcomingMatches(env.PANDASCORE_TOKEN),
-      null
-    );
-
-    const now = new Date();
-    const runningGte = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString();
-    const runningLte = new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString();
-    const upcomingGte = now.toISOString();
-    const upcomingLte = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
-
-    if (runningMatches === null && env.GRID_TOKEN && swedishTeamNames.length) {
-      runningMatches = await fetchGridMatches(
-        env.GRID_TOKEN, swedishTeamNames, runningGte, runningLte, true
-      );
-    }
-
-    if (upcomingMatches === null && env.GRID_TOKEN && swedishTeamNames.length) {
-      upcomingMatches = await fetchGridMatches(
-        env.GRID_TOKEN, swedishTeamNames, upcomingGte, upcomingLte, false
-      );
-    }
-
-    runningMatches = (runningMatches || []).filter(m =>
-      m.opponents?.length === 2 &&
-      (swedishTeamNames.length
-        ? m.opponents.some(o => swedishTeamNames.some(n => normName(n) === normName(o.opponent?.name)))
-        : true)
-    );
-
-    upcomingMatches = (upcomingMatches || []).filter(m =>
-      m.opponents?.length === 2 &&
-      (swedishTeamNames.length
-        ? m.opponents.some(o => swedishTeamNames.some(n => normName(n) === normName(o.opponent?.name)))
-        : true)
-    );
-
-    // Enrich Panda-sourced running matches with GRID live state when possible.
-    if (env.GRID_TOKEN && runningMatches.length) {
-      runningMatches = await attachGridStateToRunningMatches(
-        runningMatches,
-        [...new Set(
-          players.map(p => p.current_team?.id).filter(Boolean)
-        )],
-        env.GRID_TOKEN
-      );
-    }
-
-    const liveData = {
-      timestamp: new Date().toISOString(),
-      players,
-      running_matches: runningMatches,
-      upcoming_matches: upcomingMatches,
-    };
-
-    const liveWritten = await putIfChanged(env, KV_LIVE_DATA, liveData);
-    console.log(`Live data ${liveWritten ? 'updated' : 'unchanged, write skipped'} — ${runningMatches.length || 0} running + ${upcomingMatches.length || 0} upcoming matches`);
-
-    // 3) History rotation — only on the metadata tick (see the subrequest
-    // budget note above handleScheduled).
-    if (metadataTick) {
-      // Prefer PandaScore one-team rotation. If unavailable, use GRID series
-      // state over a recent window and merge the converted matches.
-      let rotation = await rotateHistoryTeam(env);
-
-      if (rotation) {
-        const newMatches = await tryPanda(
-          () => fetchSwedishTeamMatches(rotation.teamId, env.PANDASCORE_TOKEN),
-          null
-        );
-
-        if (newMatches) {
-          const existingHistoryJson = await env.MATCH_DATA.get(KV_HISTORY_DATA);
-          const existingHistory = existingHistoryJson ? JSON.parse(existingHistoryJson) : [];
-          const mergedHistory = await mergeHistoryData(existingHistory, newMatches);
-          await safePut(env, KV_HISTORY_DATA, JSON.stringify(mergedHistory));
-        } else if (env.GRID_TOKEN && swedishTeamNames.length) {
-          const historyGte = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-          const historyLte = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-          const gridHistory = await fetchGridMatches(
-            env.GRID_TOKEN, swedishTeamNames, historyGte, historyLte, true
-          );
-          const existingHistoryJson = await env.MATCH_DATA.get(KV_HISTORY_DATA);
-          const existingHistory = existingHistoryJson ? JSON.parse(existingHistoryJson) : [];
-          const mergedHistory = await mergeHistoryData(existingHistory, gridHistory);
-          await safePut(env, KV_HISTORY_DATA, JSON.stringify(mergedHistory));
-        }
-      } else if (env.GRID_TOKEN && swedishTeamNames.length) {
-        const historyGte = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-        const historyLte = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-        const gridHistory = await fetchGridMatches(
-          env.GRID_TOKEN, swedishTeamNames, historyGte, historyLte, true
-        );
-        const existingHistoryJson = await env.MATCH_DATA.get(KV_HISTORY_DATA);
-        const existingHistory = existingHistoryJson ? JSON.parse(existingHistoryJson) : [];
-        const mergedHistory = await mergeHistoryData(existingHistory, gridHistory);
-        await safePut(env, KV_HISTORY_DATA, JSON.stringify(mergedHistory));
-      }
-    }
-
-    // 4) Player stats queue — on its own tick, offset from the metadata
-    // tick, so it gets its own ~50-subrequest budget instead of splitting
-    // it with team-metadata/history-rotation work above.
-    if (statsTick) {
-      try {
-        const historyJson = await env.MATCH_DATA.get(KV_HISTORY_DATA);
-        const historyForQueue = historyJson ? JSON.parse(historyJson) : [];
-        const added = await enqueueFinishedGames(historyForQueue, env);
-        if (added) console.log(`Queued ${added} newly finished games for stats`);
-        const { processed, newRows, remaining, gaveUp } = await processStatsQueue(env);
-        if (processed) {
-          console.log(`Player stats: processed ${processed} games, ${newRows} new rows, ${gaveUp} gave up, ${remaining} left in queue`);
-        }
-      } catch (e) {
-        console.error(`Player stats pipeline error: ${e.message}`);
-      }
-    }
-
-    console.log('Scheduled handler completed');
-  } catch (err) {
-    console.error(`Scheduled handler error: ${err.message}`);
+    });
   }
+
+  console.log('Scheduled handler completed');
 }
 
 // ─── FETCH HANDLER (improved with fallback) ─────────────────────────────
@@ -2036,6 +2224,55 @@ async function handleFetch(request, env) {
     return new Response('Unauthorized', { status: 401, headers: corsHeaders(origin) });
   }
 
+  // GET /status -> read-only cron/cache diagnostics. This route never calls
+  // PandaScore, GRID, Fragbite, or any other external data provider.
+  if (request.method === 'GET' && path === '/status') {
+    let liveData = null;
+    let cachedNews = null;
+    let knownTeams = [];
+    try {
+      const liveJson = await env.MATCH_DATA.get(KV_LIVE_DATA);
+      liveData = liveJson ? JSON.parse(liveJson) : null;
+    } catch (err) {
+      console.warn(`[STATUS] Could not read live data: ${err.message}`);
+    }
+    try {
+      const newsJson = await env.MATCH_DATA.get(KV_NEWS_DATA);
+      cachedNews = newsJson ? JSON.parse(newsJson) : null;
+    } catch (err) {
+      console.warn(`[STATUS] Could not read news cache: ${err.message}`);
+    }
+    try {
+      knownTeams = JSON.parse(await env.MATCH_DATA.get(KV_SWEDISH_TEAMS) || '[]');
+    } catch (_) {}
+
+    const lastCronAt = liveData?.timestamp || null;
+    const lastCronMs = lastCronAt ? Date.parse(lastCronAt) : NaN;
+    const ageSeconds = Number.isFinite(lastCronMs)
+      ? Math.max(0, Math.floor((Date.now() - lastCronMs) / 1000))
+      : null;
+    const status = {
+      expectedCron: '*/3 * * * *',
+      liveDataAvailable: Boolean(liveData),
+      lastCronSnapshotAt: lastCronAt,
+      liveDataAgeSeconds: ageSeconds,
+      liveDataStale: ageSeconds === null || ageSeconds > 10 * 60,
+      refreshStatus: liveData?.refresh_status || { players: 'unknown', running_matches: 'unknown', upcoming_matches: 'unknown' },
+      playersCached: Array.isArray(liveData?.players) ? liveData.players.length : 0,
+      runningMatchesCached: Array.isArray(liveData?.running_matches) ? liveData.running_matches.length : 0,
+      upcomingMatchesCached: Array.isArray(liveData?.upcoming_matches) ? liveData.upcoming_matches.length : 0,
+      knownSwedishTeams: Array.isArray(knownTeams) ? knownTeams.length : 0,
+      newsCached: Boolean(cachedNews),
+      newsLastFetchedAt: cachedNews?.fetchedAt ? new Date(cachedNews.fetchedAt).toISOString() : null,
+      newsAgeSeconds: cachedNews?.fetchedAt ? Math.max(0, Math.floor((Date.now() - cachedNews.fetchedAt) / 1000)) : null,
+      visitorDataRefreshes: false,
+    };
+    return new Response(JSON.stringify(status, null, 2), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...corsHeaders(origin) },
+    });
+  }
+
   // POST /central or /live
   if (request.method === 'POST') {
     if (path === '/central' || path === '/live') {
@@ -2043,7 +2280,7 @@ async function handleFetch(request, env) {
       if (liveDataJson) {
         return new Response(liveDataJson, {
           status: 200,
-          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...corsHeaders(origin) },
         });
       }
       // Fallback: return 503 because we want the scheduled handler to populate this
@@ -2059,7 +2296,7 @@ async function handleFetch(request, env) {
     const pageParam = parseInt(url.searchParams.get('page') || '1');
     const perPageParam = parseInt(url.searchParams.get('per_page') || '100');
 
-    // /csgo/teams/{id} → fetch from PandaScore (cached in KV)
+    // /csgo/teams/{id} -> KV-only; roster refresh is cron-owned
     if (path.startsWith('/csgo/teams/')) {
       const teamId = path.split('/')[3];
       const nameHint = url.searchParams.get('name') || null;
@@ -2071,16 +2308,16 @@ async function handleFetch(request, env) {
         });
       } catch (err) {
         console.error(`Team roster fetch error for team ${teamId}: ${err.message}`);
-        // fetchTeamRoster already checked both the fresh and durable stale
-        // KV copies before throwing, so reaching this point means neither
-        // exists yet for this team. Nothing left to serve.
+        // fetchTeamRoster checked the fresh and durable stale KV copies.
+        // Both are missing, so return an error instead of making an API call
+        // from the visitor path. Cron will prewarm teams in KV_SWEDISH_TEAMS.
         return new Response(JSON.stringify({ error: 'Could not fetch team roster and no cached roster exists', detail: err.message }), {
           status: 503, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
         });
       }
     }
 
-    // /csgo/players → KV first, then live fallback
+    // /csgo/players -> KV only; cache misses never trigger a provider call
     if (path.includes('/players')) {
       const liveDataJson = await env.MATCH_DATA.get(KV_LIVE_DATA);
       if (liveDataJson) {
@@ -2091,47 +2328,16 @@ async function handleFetch(request, env) {
         const data = allPlayers.slice(startIdx, endIdx);
         return new Response(JSON.stringify(data), {
           status: 200,
-          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...corsHeaders(origin) },
         });
       }
-      // Fallback: PandaScore, then GRID nationality query, then stale cached players.
-      try {
-        const players = await fetchPandascoreWithPagination(
-          `${PANDA_BASE}/csgo/players?filter[nationality]=SE&per_page=100`,
-          env.PANDASCORE_TOKEN
-        );
-        if (players !== null) {
-          return new Response(JSON.stringify(players), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
-          });
-        }
-        throw new Error('PandaScore players request failed');
-      } catch (err) {
-        // PandaScore failed outright (not just "zero results") — try GRID's
-        // nationality filter before falling back to a stale KV copy.
-        if (env.GRID_TOKEN) {
-          const gridPlayers = await fetchGridSwedishPlayers('SE', env.GRID_TOKEN, env);
-          if (gridPlayers && gridPlayers.length) {
-            return new Response(JSON.stringify(gridPlayers), {
-              status: 200,
-              headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
-            });
-          }
-        }
-        // Last resort: stale KV copy from the last successful scheduler run.
-        const cachedJson = await env.MATCH_DATA.get(KV_LIVE_DATA);
-        if (cachedJson) {
-          const liveData = JSON.parse(cachedJson);
-          return new Response(JSON.stringify(liveData.players || []), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
-          });
-        }
-        return new Response(JSON.stringify({ error: 'Failed to fetch players from PandaScore and GRID, and no cached data exists' }), {
-          status: 503, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
-        });
-      }
+      // Cache-only by design. If the first scheduled tick has not populated
+      // live_data yet, return an empty list rather than making visitors call
+      // PandaScore or GRID. GET /status exposes whether cron data is missing.
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...corsHeaders(origin) },
+      });
     }
 
     // /csgo/matches/running
@@ -2141,23 +2347,14 @@ async function handleFetch(request, env) {
         const liveData = JSON.parse(liveDataJson);
         return new Response(JSON.stringify(liveData.running_matches || []), {
           status: 200,
-          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...corsHeaders(origin) },
         });
       }
-      try {
-        const matches = await fetchPandascoreWithPagination(
-          `${PANDA_BASE}/csgo/matches/running?per_page=50&include=opponents,results,games,pick_bans`,
-          env.PANDASCORE_TOKEN, 1
-        );
-        return new Response(JSON.stringify(matches || []), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
-        });
-      } catch (err) {
-        return new Response(JSON.stringify({ error: 'Failed to fetch running matches' }), {
-          status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
-        });
-      }
+      // Cache-only by design; the cron is responsible for this data every 3 minutes.
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...corsHeaders(origin) },
+      });
     }
 
     // /csgo/matches/upcoming
@@ -2167,23 +2364,14 @@ async function handleFetch(request, env) {
         const liveData = JSON.parse(liveDataJson);
         return new Response(JSON.stringify(liveData.upcoming_matches || []), {
           status: 200,
-          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...corsHeaders(origin) },
         });
       }
-      try {
-        const matches = await fetchPandascoreWithPagination(
-          `${PANDA_BASE}/csgo/matches/upcoming?per_page=30&sort=begin_at&include=opponents`,
-          env.PANDASCORE_TOKEN, 1
-        );
-        return new Response(JSON.stringify(matches || []), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
-        });
-      } catch (err) {
-        return new Response(JSON.stringify({ error: 'Failed to fetch upcoming matches' }), {
-          status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
-        });
-      }
+      // Cache-only by design; never trigger an upstream request from a visit.
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...corsHeaders(origin) },
+      });
     }
 
     // /csgo/matches/past
@@ -2194,7 +2382,7 @@ async function handleFetch(request, env) {
         // already sorts newest-first before every write, so trust that
         // order here instead of re-sorting on every single GET. Re-sorting
         // the whole array on each request scaled with total history size
-        // (which only ever grows — mergeHistoryData never evicts) and was
+        // (which only ever grows - mergeHistoryData never evicts) and was
         // hitting the Worker's CPU time limit on the higher-numbered pages
         // the client's full-history walk requests.
         const allHistory = JSON.parse(historyJson);
@@ -2203,7 +2391,7 @@ async function handleFetch(request, env) {
         const data = allHistory.slice(startIdx, endIdx);
         return new Response(JSON.stringify(data), {
           status: 200,
-          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...corsHeaders(origin) },
         });
       }
       // Fallback: empty array
@@ -2223,90 +2411,44 @@ async function handleFetch(request, env) {
         const data = allStats.slice(startIdx, endIdx);
         return new Response(JSON.stringify(data), {
           status: 200,
-          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...corsHeaders(origin) },
         });
       }
       // Fallback: empty array
       return new Response(JSON.stringify([]), {
-        status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+        status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...corsHeaders(origin) },
       });
     }
 
-    // /csgo/teams/ranking — HLTV primary, PandaScore fallback
-    if (path === '/csgo/teams/ranking') {
-      let ranking = await fetchHLTV('/api/teams/ranking', env);
-      if (ranking) {
-        const normalized = normalizeHLTVRanking(ranking);
-        return new Response(JSON.stringify(normalized), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', ...corsHeaders(origin) },
-        });
-      }
-      // Fall back to PandaScore if HLTV fails
-      try {
-        const ps = await fetchPandascoreWithPagination(
-          `${PANDA_BASE}/csgo/teams/ranking?per_page=50`,
-          env.PANDASCORE_TOKEN, 1
-        );
-        return new Response(JSON.stringify(ps || []), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', ...corsHeaders(origin) },
-        });
-      } catch (err) {
-        return new Response(JSON.stringify({ error: 'Rankings unavailable' }), {
-          status: 503, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
-        });
-      }
-    }
-
-    // /csgo/season-totals — GRID series-aggregated per-player totals (see
+    // /csgo/season-totals - GRID series-aggregated per-player totals (see
     // updateSeasonTotals). Small enough to always return whole, no paging.
     if (path.includes('/season-totals')) {
       const totalsJson = await env.MATCH_DATA.get(KV_SEASON_TOTALS);
       const totals = totalsJson ? JSON.parse(totalsJson) : {};
       return new Response(JSON.stringify(Object.values(totals)), {
         status: 200,
-        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...corsHeaders(origin) },
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...corsHeaders(origin) },
       });
     }
 
     return new Response('Not found', { status: 404 });
   }
 
-  // GET /news — Fragbite.se CS2 news, cached in KV so the frontend never
-  // hits rss.fragbite.se directly (that feed has no CORS headers for
-  // browser fetches, and hammering it on every page load would be rude
-  // anyway). NEWS_TTL_MS controls how often this worker re-pulls the feed;
-  // everything in between is served straight from KV_NEWS_DATA.
+  // GET /news - cache-only by design. Fragbite RSS is fetched by cron every
+  // four hours (and once on first initialization), never by a website visit.
+  // When the cache is absent, return an empty list until the scheduler fills it.
   if (request.method === 'GET' && path === '/news') {
-    const NEWS_TTL_MS = 15 * 60 * 1000;
-    const cachedJson = await env.MATCH_DATA.get(KV_NEWS_DATA);
-    const cached = cachedJson ? JSON.parse(cachedJson) : null;
-    if (cached && Date.now() - cached.fetchedAt < NEWS_TTL_MS) {
-      return new Response(JSON.stringify(cached.items), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300', ...corsHeaders(origin) },
-      });
-    }
+    let cached = null;
     try {
-      const items = await fetchFragbiteNews();
-      await safePut(env, KV_NEWS_DATA, JSON.stringify({ fetchedAt: Date.now(), items }));
-      return new Response(JSON.stringify(items), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300', ...corsHeaders(origin) },
-      });
+      const cachedJson = await env.MATCH_DATA.get(KV_NEWS_DATA);
+      cached = cachedJson ? JSON.parse(cachedJson) : null;
     } catch (err) {
-      console.error(`Fragbite news fetch error: ${err.message}`);
-      // Serve a stale KV copy rather than nothing, if one exists.
-      if (cached) {
-        return new Response(JSON.stringify(cached.items), {
-          status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
-        });
-      }
-      return new Response(JSON.stringify({ error: 'Failed to fetch Fragbite news' }), {
-        status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
-      });
+      console.error(`[NEWS] Could not read cached Fragbite data: ${err.message}`);
     }
+    return new Response(JSON.stringify(Array.isArray(cached?.items) ? cached.items : []), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300', ...corsHeaders(origin) },
+    });
   }
 
   return new Response('Method not allowed', { status: 405 });
@@ -2317,7 +2459,8 @@ export default {
   async fetch(request, env) {
     return handleFetch(request, env);
   },
-  async scheduled(event, env) {
-    await handleScheduled(env, event.scheduledTime);
+  // ctx.waitUntil keeps the invocation alive until the whole refresh is done.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(handleScheduled(env, event.scheduledTime));
   },
 };
